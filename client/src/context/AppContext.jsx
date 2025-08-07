@@ -18,9 +18,22 @@ export const AppProvider = ({ children }) => {
     const image_base_url = import.meta.env.VITE_TMDB_IMAGE_BASE_URL
 
     const { user } = useUser()
-    const { getToken } = useAuth()
+    const { getToken: clerkGetToken } = useAuth()
     const location = useLocation()
     const navigate = useNavigate()
+    
+    // Wrap getToken to add logging
+    const getToken = async () => {
+        console.log('getToken called');
+        try {
+            const token = await clerkGetToken();
+            console.log('Token retrieved successfully:', token ? 'Yes (token available)' : 'No');
+            return token;
+        } catch (error) {
+            console.error('Error retrieving token:', error);
+            return null;
+        }
+    }
 
     const fetchIsAdmin = async () => {
         try {
@@ -81,16 +94,57 @@ export const AppProvider = ({ children }) => {
     // }, [user])
 
     useEffect(() => {
+    console.log('AppContext - User effect triggered');
+    console.log('User authenticated:', !!user);
+    
     if (user) {
-        // Clerk user data ko backend pe bhejein
+        console.log('User details:', {
+            id: user.id,
+            name: user.fullName,
+            email: user.primaryEmailAddress?.emailAddress
+        });
+        
+        // Check for session storage items related to payment
+        const pendingOrderId = sessionStorage.getItem('pendingOrderId');
+        const paymentRedirect = sessionStorage.getItem('paymentRedirect');
+        console.log('Session storage items:', { pendingOrderId, paymentRedirect });
+        
+        // Get phone number from user's phone numbers if available
+        const phoneNumber = user.phoneNumbers && user.phoneNumbers.length > 0 
+            ? user.phoneNumbers[0].phoneNumber 
+            : user.primaryPhoneNumber?.phoneNumber || null;
+        
+        console.log('Syncing user data with backend...');
         axios.post('/api/user/sync', {
             userId: user.id,
             name: user.fullName,
             email: user.primaryEmailAddress.emailAddress,
-            image: user.imageUrl
+            image: user.imageUrl,
+            phone: phoneNumber
+        })
+        .then(response => {
+            console.log('User sync response:', response.data);
+            
+            // If we have a pending order ID and we're coming from a payment redirect,
+            // redirect to my-bookings with the order ID
+            if (pendingOrderId && paymentRedirect === 'true') {
+                console.log('Redirecting to my-bookings with pendingOrderId:', pendingOrderId);
+                // Clear the payment redirect flag but keep the order ID
+                sessionStorage.removeItem('paymentRedirect');
+                // Redirect to my-bookings with the order ID
+                navigate(`/my-bookings?orderId=${pendingOrderId}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error syncing user:', error);
         });
+        
+        console.log('Fetching admin status...');
         fetchIsAdmin();
+        console.log('Fetching favorite movies...');
         fetchFavoriteMovies();
+    } else {
+        console.log('No user authenticated, skipping data fetching');
     }
 }, [user]);
 
