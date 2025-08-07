@@ -1,0 +1,31 @@
+# Deleted Items Log
+
+## Unused Files
+
+### Client
+1. `e:\QuickShow\client\src\lib\KConverter.js` - Utility function not imported anywhere in the codebase
+2. `e:\QuickShow\client\src\lib\dateFormat.js` - Utility function not imported anywhere in the codebase
+3. `e:\QuickShow\client\src\assets\react.svg` - SVG file not imported or used anywhere
+4. `e:\QuickShow\client\src\assets\chartIcon.svg` - SVG file not imported or used anywhere
+5. `e:\QuickShow\client\src\assets\backgroundImage.png` - Image file not imported or used anywhere
+
+## Unused Imports
+
+### Client
+1. `import { dummyBookingData } from '../assets/assets'` - Removed from `MyBookings.jsx` (line 2)
+2. `import { dateFormat } from '../lib/dateFormat'` - Removed from `MyBookings.jsx` (line 6) and replaced with a new implementation in `simpleDateFormat.js`
+3. `import { useLocation, useSearchParams, useNavigate }` - Simplified to `import { useSearchParams, useNavigate }` in `MyBookings.jsx` (line 8) as `useLocation` was unused
+
+## Added Files
+
+### Client
+1. `e:\QuickShow\client\src\lib\simpleDateFormat.js` - Created a simplified date formatting utility to replace the removed dateFormat.js file
+
+## Reason for Deletion
+These files and imports were identified as unused through a comprehensive codebase analysis. No references to these files or imports were found in any part of the application.
+
+## Deletion Date
+[Current Date]
+
+## Note
+If any of these files or imports are needed in the future, they can be restored from version control or recreated as needed.

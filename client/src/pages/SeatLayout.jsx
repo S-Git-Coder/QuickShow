@@ -9,6 +9,7 @@ import BlurCircle from '../components/BlurCircle';
 import toast from 'react-hot-toast';
 import { useAppContext } from '../context/AppContext';
 
+
 const SeatLayout = () => {
 
   const groupRows = [["A", "B"], ["C", "D"], ["E", "F"], ["G", "H"], ["I", "J"]]
@@ -85,16 +86,11 @@ const SeatLayout = () => {
 
       const { data } = await axios.post('/api/booking/create', { showId: selectedTime.showId, selectedSeats }, { headers: { Authorization: `Bearer ${await getToken()}` } });
 
-      if (data.success) {
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          toast.success(data.message)
-          navigate('/my-bookings')
-        }
-
+      if (data.success && data.paymentLink) {
+        window.location.href = data.paymentLink; // Redirect user to payment page
       } else {
-        toast.error(data.message)
+        toast.success(data.message)
+        navigate('/my-bookings')
       }
     } catch (error) {
       toast.error(error.message)

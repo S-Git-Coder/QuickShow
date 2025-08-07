@@ -7,6 +7,14 @@ const bookingSchema = new mongoose.Schema({
     bookedSeats: {type: Array, required: true},
     isPaid: {type: Boolean, default: false},
     paymentLink: {type: String},
+    paymentStatus: {type: String, enum: ['pending', 'paid', 'failed'], default: 'pending'},
+    paymentDetails: {
+        referenceId: {type: String},
+        paymentMode: {type: String},
+        txMsg: {type: String},
+        txTime: {type: String},
+        signature: {type: String}
+    }
 },{timestamps: true})
 
 const Booking = mongoose.model('Booking', bookingSchema);
