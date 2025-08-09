@@ -15,16 +15,8 @@ const sandboxConfig = {
     baseUrl: process.env.CASHFREE_SANDBOX_BASE_URL || 'https://sandbox.cashfree.com/pg'
 };
 
-// Normalize credentials to prevent format issues
-if (sandboxConfig.appId && sandboxConfig.appId.includes('TEST')) {
-    // Ensure TEST prefix is properly formatted and limit length
-    sandboxConfig.appId = sandboxConfig.appId.substring(0, 30);
-}
-
-if (sandboxConfig.secretKey && sandboxConfig.secretKey.includes('TEST')) {
-    // Ensure TEST prefix is properly formatted and limit length
-    sandboxConfig.secretKey = sandboxConfig.secretKey.substring(0, 40);
-}
+// DO NOT truncate credentials - use them as is
+// Credentials need to be exact for authentication to work
 
 // Production credentials (for live payments)
 const productionConfig = {

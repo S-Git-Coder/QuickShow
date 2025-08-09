@@ -31,7 +31,7 @@ const SeatLayout = () => {
         setShow(data)
       }
     } catch (error) {
-      console.log(error)
+      toast.error('Failed to load show details')
     }
   }
 
@@ -74,7 +74,7 @@ const SeatLayout = () => {
         toast.error(data.message)
       }
     } catch (error) {
-      console.log(error)
+      toast.error('Failed to book tickets')
     }
   }
 
@@ -84,16 +84,27 @@ const SeatLayout = () => {
 
       if (!selectedTime || !selectedSeats.length) return toast.error("Please select a time and seats first");
 
+      // Show loading toast
+      const loadingToast = toast.loading("Generating payment link...");
+
       const { data } = await axios.post('/api/booking/create', { showId: selectedTime.showId, selectedSeats }, { headers: { Authorization: `Bearer ${await getToken()}` } });
 
+      // Dismiss loading toast
+      toast.dismiss(loadingToast);
+
       if (data.success && data.paymentLink) {
-        window.location.href = data.paymentLink; // Redirect user to payment page
+        // Store tempBookingId in localStorage for potential recovery
+        if (data.tempBookingId) {
+          localStorage.setItem('pendingBookingId', data.tempBookingId);
+        }
+        
+        // Redirect user to payment page
+        window.location.href = data.paymentLink;
       } else {
-        toast.success(data.message)
-        navigate('/my-bookings')
+        toast.error(data.message || "Failed to generate payment link");
       }
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error?.message || "An error occurred while processing your request");
     }
   }
 

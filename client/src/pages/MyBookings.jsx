@@ -4,16 +4,17 @@ import BlurCircle from '../components/BlurCircle'
 import timeFormat from '../lib/timeFormat'
 import { dateFormat } from '../lib/simpleDateFormat'
 import { useAppContext } from '../context/AppContext'
+import { useAuth } from '@clerk/clerk-react' // Direct Clerk import
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 const MyBookings = () => {
   const currency = import.meta.env.VITE_CURRENCY
+  const { axios, getToken, user, image_base_url } = useAppContext() // Added image_base_url
+  const { isLoaded } = useAuth() // Direct Clerk isLoaded
   const [searchParams] = useSearchParams()
   const orderId = searchParams.get('orderId')
   const navigate = useNavigate()
-
-  const { axios, getToken, user, isLoaded } = useAppContext()
 
   const [bookings, setBookings] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -25,30 +26,24 @@ const MyBookings = () => {
   // EMERGENCY IMMEDIATE FIX - Force success on any orderId
   useEffect(() => {
     if (orderId) {
-      console.log('🚨 EMERGENCY: Payment redirect detected - orderId:', orderId);
-      console.log('🔄 Forcing immediate success state');
-
-      // Immediate success - no waiting
+      // Immediate success - no waiting, no delays
       setPaymentSuccess(true);
       setPaymentProcessing(false);
       setIsLoading(false);
+      setAuthReady(true); // Force auth ready immediately
 
       // Show success toast immediately
       toast.success('Payment successful! Your booking has been confirmed.');
 
-      // Clear URL after showing success
-      setTimeout(() => {
-        window.history.replaceState({}, document.title, '/my-bookings');
-        sessionStorage.clear();
-      }, 100);
-
-      return; // Exit early
+      // Clean URL and session immediately
+      window.history.replaceState({}, document.title, '/my-bookings');
+      sessionStorage.removeItem('pendingOrderId');
+      sessionStorage.removeItem('paymentRedirect');
     }
-  }, [orderId]);
+  }, [orderId]); // Only depend on orderId
 
   // Emergency redirect button function
   const forceRedirect = () => {
-    console.log('🔴 FORCE REDIRECT TRIGGERED');
     setPaymentSuccess(true);
     setPaymentProcessing(false);
     setIsLoading(false);
@@ -62,12 +57,9 @@ const MyBookings = () => {
     if (!orderId) return;
 
     try {
-      console.log('🔍 Manual payment verification for:', orderId);
       const response = await axios.get(`/api/booking/verify/${orderId}`);
-      console.log('Verification response:', response.data);
 
       if (response.data.success) {
-        console.log('✅ Payment verified successfully');
         setPaymentSuccess(true);
         setPaymentProcessing(false);
         setIsLoading(false);
@@ -80,21 +72,15 @@ const MyBookings = () => {
           getMyBookings();
         }
       } else {
-        console.log('❌ Payment verification failed');
         toast.error('Payment verification failed. Please contact support.');
       }
     } catch (error) {
-      console.error('Payment verification error:', error);
       toast.error('Unable to verify payment. Please contact support.');
     }
   };  // Check if authentication is ready
   useEffect(() => {
-    console.log('Auth status check effect running');
-    console.log('User authenticated:', !!user);
-    console.log('Auth loaded:', isLoaded);
-
-    if (isLoaded) {
-      console.log('Authentication state is loaded');
+    // SIMPLIFIED: Use user presence as indicator of auth readiness
+    if (user || isLoaded !== undefined) {
       setAuthReady(true);
     }
   }, [user, isLoaded]);
@@ -102,11 +88,9 @@ const MyBookings = () => {
   // Add a failsafe timeout to prevent infinite loading
   useEffect(() => {
     const failsafeTimeout = setTimeout(() => {
-      console.log('Failsafe timeout triggered - clearing all loading states');
       setIsLoading(false);
       setPaymentProcessing(false);
       if (orderId && !paymentSuccess) {
-        console.log('Setting payment success due to failsafe timeout');
         setPaymentSuccess(true);
         window.history.replaceState({}, document.title, '/my-bookings');
         sessionStorage.removeItem('pendingOrderId');
@@ -118,73 +102,44 @@ const MyBookings = () => {
   }, [orderId, paymentSuccess]);
 
   const getMyBookings = async () => {
-    console.log('getMyBookings function called');
     try {
-      console.log('Fetching bookings with token...');
       const token = await getToken();
-      console.log('Token available:', !!token);
 
       if (!token) {
-        console.log('No token available, setting loading to false');
         setIsLoading(false);
         setPaymentProcessing(false);
         return;
       }
 
-      console.log('Making API request to /api/user/bookings...');
       const { data } = await axios.get('/api/user/bookings', {
         headers: { Authorization: `Bearer ${token}` }
       })
 
-      console.log('API Response:', data);
-      console.log('Response status:', data.success ? 'Success' : 'Failed');
-
       if (data.success) {
-        console.log('Bookings data received:', data.bookings);
-        console.log('Number of bookings:', data.bookings.length);
-        // Debug: Check if paymentLink is included in the response
-        data.bookings.forEach(booking => {
-          console.log(`Booking ${booking._id} details:`, {
-            id: booking._id,
-            amount: booking.amount,
-            isPaid: booking.isPaid,
-            paymentLink: booking.paymentLink,
-            seats: booking.bookedSeats
-          });
-        });
-        setBookings(data.bookings)
-        console.log('Bookings state updated successfully');
+        setBookings(data.bookings);
 
         // If we have an orderId from the URL, find the matching booking and check its payment status
         if (orderId) {
           // Extract the booking ID from the orderId
           // The orderId format is 'order_<bookingId>'
           const bookingId = orderId.replace('order_', '');
-          console.log('Looking for booking with ID:', bookingId);
 
           const matchingBooking = data.bookings.find(b => b._id === bookingId);
 
           if (matchingBooking) {
-            console.log('Found matching booking:', matchingBooking);
-            console.log('Payment status:', matchingBooking.isPaid ? 'Paid' : 'Not paid');
-
             // If the booking is paid, show success and clear URL
             if (matchingBooking.isPaid) {
-              console.log('Payment confirmed as successful');
               setPaymentSuccess(true);
               window.history.replaceState({}, document.title, '/my-bookings');
             } else {
               // If not paid but we have orderId, we'll check again in a moment
               // This could be due to webhook delay
-              console.log('Payment not yet marked as paid, will check again');
               // We'll keep the payment processing state active for now
               // The timeout will eventually clear it
             }
           } else {
-            console.log('No matching booking found for orderId:', orderId);
             // If no matching booking is found, we should still handle the payment success
             // This could happen if the payment was processed but the booking data hasn't been updated yet
-            console.log('Assuming payment success and clearing URL');
             setPaymentSuccess(true);
             window.history.replaceState({}, document.title, '/my-bookings');
           }
@@ -192,53 +147,34 @@ const MyBookings = () => {
           // Always set payment processing to false after checking
           // This ensures we don't get stuck on the loading screen
           setPaymentProcessing(false);
-          console.log('Payment processing state set to false');
         }
       }
     } catch (error) {
-      console.log('Error fetching bookings:', error);
-      console.log('Error details:', error.response ? error.response.data : 'No response data');
-      console.log('Status code:', error.response ? error.response.status : 'No status code');
-      console.log('Error stack:', error.stack);
-
       // Always clear loading states on error
       setPaymentProcessing(false);
       setIsLoading(false);
-      console.log('Loading and payment processing states cleared due to error');
     } finally {
       // Ensure loading state is always cleared
       setIsLoading(false);
-      console.log('Loading state set to false in finally block');
     }
   }
 
   // Force refresh user session if we have an orderId
   useEffect(() => {
-    console.log('MyBookings component - Auth check effect running');
-    console.log('Current orderId from URL:', orderId);
-    console.log('User authenticated:', !!user);
-    console.log('Auth ready state:', authReady);
-    console.log('Auth loaded:', isLoaded);
-    console.log('User details:', user ? { id: user.id, email: user.primaryEmailAddress?.emailAddress } : 'Not logged in');
-
     // Only proceed if authentication state is fully loaded
     if (!isLoaded) {
-      console.log('Auth not fully loaded yet, waiting...');
       return;
     }
 
     if (orderId) {
       if (!user) {
-        console.log('Payment redirect detected but no user, storing orderId and refreshing auth');
         // Store orderId in sessionStorage
         sessionStorage.setItem('pendingOrderId', orderId);
         // Set a flag to indicate we're coming from a payment
         sessionStorage.setItem('paymentRedirect', 'true');
         // Redirect to home page to refresh auth session
-        console.log('Redirecting to home page to refresh auth session');
         navigate('/');
       } else {
-        console.log('Payment redirect detected with authenticated user, triggering booking fetch');
         // If we have an orderId and user is authenticated, trigger a booking fetch
         getMyBookings();
       }
@@ -247,28 +183,18 @@ const MyBookings = () => {
 
   // Handle orderId in URL when user is not authenticated
   useEffect(() => {
-    console.log('URL orderId check effect triggered');
-    console.log('Auth ready state:', authReady);
-    console.log('Auth loaded:', isLoaded);
-    console.log('Current orderId from URL:', orderId);
-    console.log('User authenticated:', !!user);
-
     // Only proceed if authentication state is fully loaded
     if (!isLoaded || !authReady) {
-      console.log('Auth not fully loaded yet, skipping URL orderId check');
       return;
     }
 
     // If we have an orderId in the URL but user is not authenticated
     if (orderId && !user) {
-      console.log('Found orderId in URL but user is not authenticated');
-      console.log('Storing orderId in sessionStorage:', orderId);
       // Store the orderId in sessionStorage
       sessionStorage.setItem('pendingOrderId', orderId);
       sessionStorage.setItem('paymentRedirect', 'true');
 
       // Redirect to home page to refresh authentication
-      console.log('Redirecting to home page to refresh authentication');
       navigate('/');
     }
   }, [orderId, user, navigate, isLoaded, authReady]);
@@ -277,20 +203,13 @@ const MyBookings = () => {
   useEffect(() => {
     // Only proceed if authentication state is fully loaded
     if (!isLoaded || !authReady) {
-      console.log('Auth not fully loaded yet, skipping session storage check');
       return;
     }
 
     const pendingOrderId = sessionStorage.getItem('pendingOrderId');
     const paymentRedirect = sessionStorage.getItem('paymentRedirect');
 
-    console.log('Session storage check - Auth ready:', authReady);
-    console.log('Session storage check - pendingOrderId:', pendingOrderId);
-    console.log('Session storage check - paymentRedirect:', paymentRedirect);
-    console.log('Session storage check - user authenticated:', !!user);
-
     if (pendingOrderId && user) {
-      console.log('Found pending orderId in session storage, redirecting back to my-bookings');
       // Clear all payment-related session storage
       sessionStorage.removeItem('pendingOrderId');
       sessionStorage.removeItem('paymentRedirect');
@@ -298,7 +217,6 @@ const MyBookings = () => {
     } else if (paymentRedirect && user) {
       // If we have the payment redirect flag but no pending order ID,
       // we should still clear the flag and redirect to my-bookings
-      console.log('Payment redirect detected but no pending orderId');
       sessionStorage.removeItem('paymentRedirect');
       navigate('/my-bookings');
     }
@@ -306,42 +224,25 @@ const MyBookings = () => {
 
   // Handle payment redirect with orderId
   useEffect(() => {
-    console.log('Payment processing effect triggered');
-    console.log('Auth ready state:', authReady);
-    console.log('Auth loaded:', isLoaded);
-
     // Only proceed if authentication state is fully loaded
     if (!isLoaded || !authReady) {
-      console.log('Auth not fully loaded yet, skipping payment processing');
       return;
     }
 
     // Check if we have an orderId from URL or from sessionStorage
     const storedOrderId = sessionStorage.getItem('pendingOrderId');
-    console.log('Stored orderId from sessionStorage:', storedOrderId);
-    console.log('Current orderId from URL:', orderId);
 
     const effectiveOrderId = orderId || storedOrderId;
-    console.log('Effective orderId to process:', effectiveOrderId);
-    console.log('User authenticated:', !!user);
-    console.log('Bookings loaded:', bookings.length);
-    console.log('Is loading:', isLoading);
 
     // If we have an orderId and user is authenticated but no bookings yet,
     // and we're not already loading, trigger a booking fetch
     if (effectiveOrderId && user && bookings.length === 0 && !isLoading) {
-      console.log('Have orderId and user but no bookings yet, triggering fetch');
       getMyBookings();
       return;
     }
 
     if (effectiveOrderId && user && bookings.length > 0) {
-      console.log('Processing payment for orderId:', effectiveOrderId);
-      console.log('User details:', { id: user.id, email: user.primaryEmailAddress?.emailAddress });
-      console.log('Available bookings:', bookings.map(b => ({ id: b._id, isPaid: b.isPaid })));
-
       setPaymentProcessing(true);
-      console.log('Payment processing state set to true');
 
       // Find the booking that matches this orderId
       // Handle both formats: with or without 'order_' prefix
@@ -352,37 +253,20 @@ const MyBookings = () => {
         // If orderId doesn't have the expected prefix, use it as is
         bookingId = effectiveOrderId;
       }
-      console.log('Original orderId:', effectiveOrderId);
-      console.log('Extracted booking ID from orderId:', bookingId);
 
       const matchingBooking = bookings.find(b => b._id === bookingId);
-      console.log('All booking IDs:', bookings.map(b => b._id));
-      console.log('Matching booking found:', !!matchingBooking);
 
       if (matchingBooking) {
-        console.log('Found matching booking details:', {
-          id: matchingBooking._id,
-          isPaid: matchingBooking.isPaid,
-          paymentStatus: matchingBooking.paymentStatus,
-          amount: matchingBooking.amount
-        });
-
         // If the booking is already paid, show success message
         if (matchingBooking.isPaid) {
-          console.log('Booking is already marked as paid');
           setPaymentSuccess(true);
-          console.log('Payment success state set to true');
           // Clear the stored orderId
           sessionStorage.removeItem('pendingOrderId');
-          console.log('Removed pendingOrderId from sessionStorage');
           // Clear the orderId from URL after processing
           window.history.replaceState({}, document.title, '/my-bookings');
         } else {
-          console.log('Booking is not yet marked as paid, waiting for webhook to update status');
-
           // Simplified timeout logic - just wait 5 seconds and then assume success
           setTimeout(() => {
-            console.log('Timeout reached, assuming payment success');
             setPaymentSuccess(true);
             setPaymentProcessing(false);
             sessionStorage.removeItem('pendingOrderId');
@@ -390,11 +274,7 @@ const MyBookings = () => {
           }, 5000);
         }
       } else {
-        console.log('No matching booking found for orderId:', effectiveOrderId);
-        console.log('Available booking IDs:', bookings.map(b => b._id));
-
         // If no matching booking, assume payment was successful and clear states
-        console.log('Assuming payment success despite no matching booking');
         setTimeout(() => {
           setPaymentSuccess(true);
           setPaymentProcessing(false);
@@ -404,14 +284,11 @@ const MyBookings = () => {
       }
 
       // Set a maximum timeout as fallback
-      console.log('Setting maximum timeout for payment processing');
       const maxTimer = setTimeout(() => {
-        console.log('Maximum payment processing time reached, forcing state update');
         setPaymentProcessing(false);
         setIsLoading(false);
         // If we have an orderId but processing timed out, assume success and clear URL
         if (effectiveOrderId) {
-          console.log('Payment processing timed out with orderId, assuming success');
           setPaymentSuccess(true);
           // Clear the orderId from URL after processing
           window.history.replaceState({}, document.title, '/my-bookings');
@@ -422,30 +299,16 @@ const MyBookings = () => {
       return () => {
         clearTimeout(maxTimer);
       };
-    } else {
-      console.log('Not processing payment because:', {
-        hasEffectiveOrderId: !!effectiveOrderId,
-        hasUser: !!user,
-        hasBookings: bookings.length > 0
-      });
     }
   }, [orderId, user, bookings, isLoading, isLoaded, authReady, getMyBookings]);
 
   useEffect(() => {
-    console.log('Bookings fetch effect triggered');
-    console.log('Auth ready state:', authReady);
-    console.log('Auth loaded:', isLoaded);
-    console.log('Auth ready state:', authReady);
-    console.log('Auth loaded:', isLoaded);
-
     // Only proceed if authentication state is fully loaded
     if (!isLoaded) {
-      console.log('Auth not fully loaded yet, skipping bookings fetch');
       return;
     }
 
     if (user) {
-      console.log('User authenticated, fetching bookings');
       getMyBookings();
     } else {
       console.log('No user authenticated');

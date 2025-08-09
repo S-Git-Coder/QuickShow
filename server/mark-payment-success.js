@@ -24,7 +24,9 @@ const markPaymentSuccess = async (orderId) => {
             signature: 'manual_signature'
         };
 
-        const response = await axios.post('http://localhost:3000/api/booking/callback', webhookData, {
+        // Use production URL instead of localhost
+        const serverUrl = process.env.SERVER_URL || 'https://quickshow-server-sahil-patels-projects-4fd5f591.vercel.app';
+        const response = await axios.post(`${serverUrl}/api/booking/callback`, webhookData, {
             headers: {
                 'Content-Type': 'application/json',
                 'x-api-version': '2022-01-01'
@@ -34,7 +36,7 @@ const markPaymentSuccess = async (orderId) => {
         console.log('✅ Payment marked as successful:', response.data);
 
         // Also test the verification endpoint
-        const verifyResponse = await axios.get(`http://localhost:3000/api/booking/verify/${orderId}`);
+        const verifyResponse = await axios.get(`${serverUrl}/api/booking/verify/${orderId}`);
         console.log('✅ Verification result:', verifyResponse.data);
 
     } catch (error) {

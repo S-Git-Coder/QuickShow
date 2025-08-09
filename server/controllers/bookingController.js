@@ -2,7 +2,9 @@ import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import User from "../models/User.js";
 import axios from "axios";
+import mongoose from "mongoose";
 import cashfreeConfig from "../configs/cashfree.js";
+import { buildReturnUrl, buildNotifyUrl, getEnvironmentInfo } from "../utils/urlBuilder.js";
 
 // Function to check availability of selected seats for a movie
 const checkSeatsAvailability = async (showId, selectedSeats) => {
@@ -34,32 +36,48 @@ export const createBooking = async (req, res) => {
         }
 
         const showData = await Show.findById(showId).populate('movie');
-
-        const booking = await Booking.create({
-            user: userId,
-            show: showId,
-            amount: showData.showPrice * selectedSeats.length,
-            bookedSeats: selectedSeats
-        });
-
-        selectedSeats.forEach(seat => {
-            showData.occupiedSeats[seat] = userId;
-        });
-
-        showData.markModified('occupiedSeats');
-        await showData.save();
-
+        
+        // Calculate the amount but don't create the booking yet
+        const amount = showData.showPrice * selectedSeats.length;
+        
         const user = await User.findById(userId);
         if (!user) {
             return res.json({ success: false, message: "User not found" });
         }
-
-        await booking.save();
+        
+        // Create a temporary booking ID for Cashfree order
+        const tempBookingId = new mongoose.Types.ObjectId();
 
         // --------- Cashfree Order Create Logic START ---------
+        // Get environment-aware URLs
+        const returnUrl = buildReturnUrl(`order_${tempBookingId}`);
+        const notifyUrl = buildNotifyUrl();
+        const envInfo = getEnvironmentInfo();
+
+        // Log URL configuration for debugging
+        console.log('🌐 URL Configuration:', {
+            environment: envInfo.environment,
+            isProduction: envInfo.isProduction,
+            protocol: envInfo.protocol,
+            returnUrl,
+            notifyUrl
+        });
+
+        // Store booking data in session for later creation after payment
+        // We'll use this data in the payment callback
+        req.session = req.session || {};
+        req.session.pendingBooking = {
+            tempBookingId: tempBookingId.toString(),
+            userId,
+            showId,
+            selectedSeats,
+            amount,
+            createdAt: new Date()
+        };
+        
         const orderPayload = {
-            order_id: `order_${booking._id}`,
-            order_amount: booking.amount,
+            order_id: `order_${tempBookingId}`,
+            order_amount: amount,
             order_currency: "INR",
             customer_details: {
                 customer_id: userId,
@@ -67,35 +85,10 @@ export const createBooking = async (req, res) => {
                 customer_phone: user.phone // Using dynamic phone number from user model
             },
             order_meta: {
-                return_url: (process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true')
-                    ? "https://quick-show.vercel.app/my-bookings?orderId=" + `order_${booking._id}`
-                    : "http://localhost:5174/my-bookings?orderId=" + `order_${booking._id}`,
-                notify_url: (process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true')
-                    ? "https://quick-show-server.vercel.app/api/booking/callback"
-                    : "http://localhost:3000/api/booking/callback"
+                return_url: returnUrl,
+                notify_url: notifyUrl
             }
         };
-
-        // Add detailed logging for debugging
-        // console.log('Cashfree payment integration - Order payload:', JSON.stringify(orderPayload));
-        // Enhanced debugging for Cashfree configuration
-        // console.log('Cashfree config:', {
-        //     baseUrl: cashfreeConfig.baseUrl,
-        //     appId: cashfreeConfig.appId ? cashfreeConfig.appId.substring(0, 5) + '...' : 'Not available',
-        //     secretKey: cashfreeConfig.secretKey ? cashfreeConfig.secretKey.substring(0, 5) + '...' : 'Not available',
-        //     appIdLength: cashfreeConfig.appId ? cashfreeConfig.appId.length : 0,
-        //     secretKeyLength: cashfreeConfig.secretKey ? cashfreeConfig.secretKey.length : 0,
-        //     isProduction: process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true',
-        //     environment: process.env.NODE_ENV || 'development',
-        //     cashfreeUseProduction: process.env.CASHFREE_USE_PRODUCTION
-        // });
-
-        // if (cashfreeConfig.appId) {
-        //     console.log('Using App ID:', cashfreeConfig.appId.substring(0, 5) + '... (length: ' + cashfreeConfig.appId.length + ')');
-        // }
-        // if (cashfreeConfig.secretKey) {
-        //     console.log('Using Secret Key:', cashfreeConfig.secretKey.substring(0, 5) + '... (length: ' + cashfreeConfig.secretKey.length + ')');
-        // }
 
         // Credentials are now normalized in cashfree.js config
 
@@ -105,45 +98,61 @@ export const createBooking = async (req, res) => {
             const headers = {
                 "x-client-id": cashfreeConfig.appId,
                 "x-client-secret": cashfreeConfig.secretKey,
-                "x-api-version": "2022-01-01",
+                "x-api-version": "2023-08-01",
                 "Content-Type": "application/json"
             };
-
-            // console.log('Sending request to Cashfree API with headers:', {
-            //     "x-client-id": headers["x-client-id"].substring(0, 5) + '...',
-            //     "x-client-secret": headers["x-client-secret"].substring(0, 5) + '...',
-            //     "x-api-version": headers["x-api-version"],
-            //     "Content-Type": headers["Content-Type"]
-            // });
 
             const cashfreeRes = await axios.post(
                 `${cashfreeConfig.baseUrl}/orders`,
                 orderPayload,
                 { headers }
             );
-            console.log('Cashfree API response:', JSON.stringify(cashfreeRes.data));
 
-            // Use the payment_link directly from the Cashfree response
-            // The API version 2022-01-01 provides a direct payment_link instead of payment_session_id
-            paymentLink = cashfreeRes.data.payment_link;
-            console.log('Payment link generated:', paymentLink ? 'Success' : 'Failed');
-            booking.paymentLink = paymentLink;
+            // For API version 2023-08-01, we need to construct the payment URL using payment_session_id
+            if (cashfreeRes.data.payment_session_id) {
+                // Always use production URL for payments
+                // const isProduction = process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true';
+                // const isLocalDevelopment = returnUrl.includes('localhost') || notifyUrl.includes('localhost');
+                // const basePaymentUrl = (isProduction && !isLocalDevelopment)
+                //     ? 'https://payments.cashfree.com/pay/'
+                //     : 'https://sandbox.cashfree.com/pay/';
+                
+                // Always use production URL for payments
+                const basePaymentUrl = 'https://payments.cashfree.com/pay/';
+                paymentLink = `${basePaymentUrl}${cashfreeRes.data.payment_session_id}`;
+                
+                // Store the payment session ID in the session for verification later
+                if (req.session && req.session.pendingBooking) {
+                    req.session.pendingBooking.paymentSessionId = cashfreeRes.data.payment_session_id;
+                    req.session.pendingBooking.paymentLink = paymentLink;
+                }
+            } else {
+                paymentLink = null;
+                return res.json({
+                    success: false,
+                    message: "Failed to generate payment link. Please try again."
+                });
+            }
         } catch (error) {
             console.error('Cashfree API error:', error.message);
             console.error('Cashfree API error status:', error.response ? error.response.status : 'No status');
             console.error('Cashfree API error data:', error.response ? JSON.stringify(error.response.data) : 'No response data');
-            throw error; // Re-throw to be caught by the outer try-catch
+            
+            return res.json({
+                success: false,
+                message: "Payment gateway error. Please try again later.",
+                error: error.message
+            });
         }
-
-        // Save the booking with payment link
-        await booking.save();
 
         // --------- Cashfree Order Create Logic END ---------
 
-        res.json({
+        // Return success response with payment link only
+        return res.json({
             success: true,
-            message: "Booking created successfully",
-            paymentLink
+            message: "Payment link generated successfully",
+            paymentLink: paymentLink,
+            tempBookingId: tempBookingId
         });
     } catch (error) {
         // Enhanced error logging
@@ -171,6 +180,107 @@ export const createBooking = async (req, res) => {
     }
 };
 
+// Handle payment callback from Cashfree
+export const handlePaymentCallback = async (req, res) => {
+    try {
+        const { order_id } = req.query;
+        
+        if (!order_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Order ID is required"
+            });
+        }
+        
+        // Extract tempBookingId from order_id (format: order_<tempBookingId>)
+        const tempBookingId = order_id.replace('order_', '');
+        
+        // Get pending booking data from session
+        if (!req.session || !req.session.pendingBooking || req.session.pendingBooking.tempBookingId !== tempBookingId) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid or expired booking session"
+            });
+        }
+        
+        const pendingBooking = req.session.pendingBooking;
+        
+        // Verify payment status with Cashfree
+        const headers = {
+            "x-client-id": cashfreeConfig.appId,
+            "x-client-secret": cashfreeConfig.secretKey,
+            "x-api-version": "2023-08-01",
+            "Content-Type": "application/json"
+        };
+        
+        const paymentVerification = await axios.get(
+            `${cashfreeConfig.baseUrl}/orders/${order_id}`,
+            { headers }
+        );
+        
+        // Check if payment is successful
+        if (paymentVerification.data.order_status === 'PAID') {
+            // Get user and show data
+            const user = await User.findById(pendingBooking.userId);
+            const show = await Show.findById(pendingBooking.showId);
+            
+            if (!user || !show) {
+                return res.status(404).json({
+                    success: false,
+                    message: "User or Show not found"
+                });
+            }
+            
+            // Check if seats are still available
+            const bookedSeats = await Booking.find({ show: pendingBooking.showId }).distinct('bookedSeats');
+            const flattenedBookedSeats = bookedSeats.flat();
+            
+            // Check if any selected seat is already booked
+            const unavailableSeats = pendingBooking.selectedSeats.filter(seat => 
+                flattenedBookedSeats.includes(seat)
+            );
+            
+            if (unavailableSeats.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Seats ${unavailableSeats.join(', ')} are no longer available`
+                });
+            }
+            
+            // Create the booking now that payment is confirmed
+            const booking = await Booking.create({
+                user: pendingBooking.userId,
+                show: pendingBooking.showId,
+                amount: pendingBooking.amount,
+                bookedSeats: pendingBooking.selectedSeats,
+                paymentStatus: 'paid',
+                paymentLink: pendingBooking.paymentLink,
+                paymentDetails: {
+                    orderId: order_id,
+                    paymentId: paymentVerification.data.cf_payment_id,
+                    paymentMethod: paymentVerification.data.payment_method,
+                    paymentTime: new Date()
+                }
+            });
+            
+            // Clear the pending booking from session
+            delete req.session.pendingBooking;
+            
+            // Redirect to success page
+            return res.redirect(`/booking-success/${booking._id}`);
+        } else {
+            // Payment failed
+            return res.redirect(`/booking-failed?reason=${paymentVerification.data.order_status}`);
+        }
+    } catch (error) {
+        console.error('Payment callback error:', error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Error processing payment callback"
+        });
+    }
+};
+
 export const getOccupiedSeats = async (req, res) => {
     try {
         const { showId } = req.params;
@@ -184,22 +294,15 @@ export const getOccupiedSeats = async (req, res) => {
     }
 };
 
-// Handle payment callback from Cashfree
-export const handlePaymentCallback = async (req, res) => {
+// Handle webhook notifications from Cashfree (separate from redirect callback)
+export const handlePaymentWebhook = async (req, res) => {
     try {
-        console.log('Payment callback received - START');
-        console.log('Request body:', JSON.stringify(req.body));
-        console.log('Request headers:', JSON.stringify(req.headers));
-        console.log('Request method:', req.method);
-        console.log('Request path:', req.path);
-
         // Check if this is a test request from Cashfree dashboard
         // Cashfree dashboard sends a test request with specific headers
         const isCashfreeTest = req.headers['x-webhook-source'] === 'cashfree' ||
             req.headers['user-agent']?.includes('Cashfree');
 
         if (isCashfreeTest) {
-            console.log('Cashfree dashboard test detected');
             // Return HTTP 200 with a simple success message
             // This is what Cashfree expects during webhook testing
             return res.status(200).send('Webhook received successfully');
@@ -207,14 +310,10 @@ export const handlePaymentCallback = async (req, res) => {
 
         const { orderId, orderAmount, referenceId, txStatus, paymentMode, txMsg, txTime, signature } = req.body;
 
-        console.log('Payment callback received:', JSON.stringify(req.body));
-        console.log('Headers:', JSON.stringify(req.headers));
-
         // Check if this is a test webhook from our test script
         const isTestWebhook = orderId?.includes('test');
 
         if (isTestWebhook) {
-            console.log('Test webhook detected');
             // For test webhooks, just return success
             return res.json({
                 success: true,
@@ -233,39 +332,17 @@ export const handlePaymentCallback = async (req, res) => {
             // If orderId doesn't have the expected prefix, use it as is
             bookingId = orderId;
         }
-        console.log('Original orderId:', orderId);
-        console.log('Extracted booking ID:', bookingId);
 
         // Find the booking
-        console.log('Searching for booking with ID:', bookingId);
         const booking = await Booking.findById(bookingId);
-        console.log('Booking found:', booking ? 'Yes' : 'No');
 
         if (!booking) {
-            console.error('Booking not found for orderId:', orderId);
-            console.error('Original orderId from request:', req.body.orderId);
             return res.status(404).json({ success: false, message: 'Booking not found' });
         }
-
-        console.log('Current booking state:', {
-            id: booking._id,
-            isPaid: booking.isPaid,
-            paymentStatus: booking.paymentStatus,
-            amount: booking.amount,
-            user: booking.user
-        });
 
         // Update booking status based on payment status
         const newPaymentStatus = txStatus === 'SUCCESS' ? 'paid' : 'failed';
         const newIsPaid = txStatus === 'SUCCESS';
-
-        console.log('Updating payment status:', {
-            from: booking.paymentStatus,
-            to: newPaymentStatus,
-            isPaidFrom: booking.isPaid,
-            isPaidTo: newIsPaid,
-            txStatus
-        });
 
         booking.paymentStatus = newPaymentStatus;
         booking.isPaid = newIsPaid; // Sync isPaid with paymentStatus
@@ -277,11 +354,7 @@ export const handlePaymentCallback = async (req, res) => {
             signature
         };
 
-        console.log('Saving updated booking...');
         await booking.save();
-        console.log('Booking saved successfully');
-
-        console.log(`Payment ${txStatus} for booking ${bookingId}`);
 
         // Return success response
         res.json({
@@ -294,35 +367,124 @@ export const handlePaymentCallback = async (req, res) => {
     }
 };
 
-// Manual payment verification endpoint for debugging
+// Manual payment verification endpoint for debugging and recovery
 export const verifyPayment = async (req, res) => {
     try {
         const { orderId } = req.params;
-        console.log('Manual payment verification requested for:', orderId);
 
-        // Extract booking ID from order_id (format: order_<bookingId>)
-        let bookingId;
-        if (orderId && orderId.startsWith('order_')) {
-            bookingId = orderId.replace('order_', '');
-        } else {
-            bookingId = orderId;
-        }
-
-        console.log('Looking for booking with ID:', bookingId);
-        const booking = await Booking.findById(bookingId);
-
-        if (!booking) {
-            return res.status(404).json({
+        if (!orderId) {
+            return res.status(400).json({
                 success: false,
-                message: 'Booking not found',
-                bookingId: bookingId
+                message: "Order ID is required"
             });
         }
 
+        // Verify payment status with Cashfree
+        const headers = {
+            "x-client-id": cashfreeConfig.appId,
+            "x-client-secret": cashfreeConfig.secretKey,
+            "x-api-version": "2023-08-01",
+            "Content-Type": "application/json"
+        };
+        
+        try {
+            const paymentVerification = await axios.get(
+                `${cashfreeConfig.baseUrl}/orders/${orderId}`,
+                { headers }
+            );
+            
+            // Check if payment is successful
+            if (paymentVerification.data.order_status === 'PAID') {
+                // Extract tempBookingId from order_id (format: order_<tempBookingId>)
+                const tempBookingId = orderId.replace('order_', '');
+                
+                // Check if booking already exists
+                const existingBooking = await Booking.findOne({
+                    'paymentDetails.orderId': orderId
+                });
+                
+                if (existingBooking) {
+                    return res.json({
+                        success: true,
+                        message: "Payment already verified and booking created",
+                        booking: existingBooking
+                    });
+                }
+                
+                // If no booking exists but payment is successful, we need to recover from session or localStorage
+                return res.json({
+                    success: true,
+                    message: "Payment verified successfully, but booking not found. Please contact support with order ID: " + orderId,
+                    paymentStatus: paymentVerification.data.order_status,
+                    orderId: orderId
+                });
+            } else {
+                // Payment not successful
+                return res.json({
+                    success: false,
+                    message: "Payment not successful",
+                    paymentStatus: paymentVerification.data.order_status,
+                    orderId: orderId
+                });
+            }
+        } catch (error) {
+            // If Cashfree API call fails, check if booking exists in our database
+            // Extract tempBookingId from order_id (format: order_<tempBookingId>)
+            const tempBookingId = orderId.replace('order_', '');
+            
+            // Check if booking exists
+            const existingBooking = await Booking.findOne({
+                'paymentDetails.orderId': orderId
+            });
+            
+            if (existingBooking) {
+                return res.json({
+                    success: true,
+                    message: "Booking found in database",
+                    booking: existingBooking
+                });
+            } else {
+                return res.status(404).json({
+                    success: false,
+                    message: "Payment verification failed and no booking found",
+                    error: error.message
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Payment verification error:', error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Error verifying payment",
+            error: error.message
+        });
+    }
+};
+
+// Manual verification of booking payment status
+export const verifyBookingPayment = async (req, res) => {
+    try {
+        const { bookingId } = req.params;
+        
+        if (!bookingId) {
+            return res.status(400).json({
+                success: false,
+                message: "Booking ID is required"
+            });
+        }
+        
+        const booking = await Booking.findById(bookingId);
+        
+        if (!booking) {
+            return res.status(404).json({
+                success: false,
+                message: "Booking not found"
+            });
+        }
+        
         // For debugging purposes, assume payment was successful if booking exists
         // This is a temporary solution for the stuck loading issue
         if (!booking.isPaid) {
-            console.log('Booking found but not marked as paid, updating status...');
             booking.isPaid = true;
             booking.paymentStatus = 'paid';
             booking.paymentDetails = {
@@ -331,7 +493,6 @@ export const verifyPayment = async (req, res) => {
                 verifiedAt: new Date().toISOString()
             };
             await booking.save();
-            console.log('Booking status updated to paid');
         }
 
         res.json({

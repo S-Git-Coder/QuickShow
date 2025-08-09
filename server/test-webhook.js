@@ -51,8 +51,10 @@ async function testWebhook(versionIndex) {
   
   try {
     // Send webhook data to the callback endpoint
+    // Using production URL instead of localhost
+    const serverUrl = process.env.SERVER_URL || 'https://quickshow-server-sahil-patels-projects-4fd5f591.vercel.app';
     const response = await axios.post(
-      'http://localhost:3000/api/booking/callback',
+      `${serverUrl}/api/booking/callback`,
       testData.webhookData,
       {
         headers: {

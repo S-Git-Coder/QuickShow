@@ -4,7 +4,7 @@ import 'dotenv/config';
 import connectDB from './configs/db.js';
 
 // Set default NODE_ENV if not defined
-process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+// process.env.NODE_ENV = process.env.NODE_ENV || 'development'; // Commented out to use value from .env
 import { clerkMiddleware } from '@clerk/express';
 import { serve } from "inngest/express";
 import { inngest, functions } from "./inngest/index.js";
@@ -12,16 +12,18 @@ import showRouter from './routes/showRoutes.js';
 import bookingRouter from './routes/bookingRoutes.js';
 import adminRouter from './routes/adminRoutes.js';
 import userRouter from './routes/userRoutes.js';
+import testRouter from './routes/testRoutes.js';
 
 const app = express();
 const port = 3000;
 
-await connectDB()
+// Connect to database
+connectDB()
 
 // Middleware
 app.use(express.json())
 
-// Configure CORS with specific options for debugging
+// Configure CORS with specific options for production
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or Postman)
@@ -29,14 +31,23 @@ const corsOptions = {
 
     // Define allowed origins
     const allowedOrigins = [
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:3000',
+      // Development origins (commented out for production)
+      // 'http://localhost:5173',
+      // 'http://localhost:5174',
+      // 'http://localhost:3000',
+      // Production origin
       'https://quick-show.vercel.app'
     ];
 
-    // Check if the origin is in the allowed list or is a localhost with any port
-    if (allowedOrigins.includes(origin) || origin.match(/^http:\/\/localhost:\d+$/)) {
+    // In production, only allow specific origins
+    // In development, allow localhost with any port
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true';
+    
+    if (isProduction) {
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+    } else if (allowedOrigins.includes(origin) || origin.match(/^http:\/\/localhost:\d+$/)) {
       return callback(null, true);
     }
 
@@ -49,36 +60,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions))
-console.log('CORS configured with options:', corsOptions);
 
-// Add request logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  console.log('Request headers:', req.headers);
-  next();
-});
-
-// Configure Clerk middleware with debug logging
+// Configure Clerk middleware
 app.use(clerkMiddleware());
-
-// Add auth debug middleware
-app.use((req, res, next) => {
-  if (req.auth) {
-    try {
-      const authInfo = req.auth();
-      console.log('Auth info available:', {
-        userId: authInfo.userId,
-        sessionId: authInfo.sessionId,
-        isAuthenticated: !!authInfo.userId
-      });
-    } catch (error) {
-      console.error('Error accessing auth info:', error.message);
-    }
-  } else {
-    console.log('No auth object available on request');
-  }
-  next();
-});
 
 // API Routes 
 app.get('/', (req, res) => res.send('Server is Live!'))
@@ -87,6 +71,7 @@ app.use('/api/show', showRouter)
 app.use('/api/booking', bookingRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/user', userRouter)
+app.use('/api/test', testRouter)
 
 app.listen(port, () => {
   if (process.env.NODE_ENV !== 'production') {
