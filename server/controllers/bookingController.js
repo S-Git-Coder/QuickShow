@@ -93,6 +93,7 @@ export const createBooking = async (req, res) => {
         // Credentials are now normalized in cashfree.js config
 
         let paymentLink;
+        let paymentSessionId = null; // expose to response for SDK-based checkout
         try {
             // Log the exact headers being sent (without exposing the full secret key)
             console.log('Cashfree API Request:');
@@ -148,6 +149,7 @@ export const createBooking = async (req, res) => {
 
                 // Construct payment URL - ensure proper formatting with a slash between base URL and session ID
                 const sessionId = cashfreeRes.data.payment_session_id.trim();
+                paymentSessionId = sessionId; // keep for client-side SDK
                 paymentLink = `${basePaymentUrl}/${sessionId}`;
                 console.log('- Generated Payment URL:', paymentLink);
 
@@ -181,6 +183,7 @@ export const createBooking = async (req, res) => {
                                     console.log('  - ⚠️ Session ID mismatch, updating to verified ID');
                                     console.log('  - Original:', sessionId);
                                     console.log('  - Verified:', verifiedSessionId);
+                                    paymentSessionId = verifiedSessionId;
                                     paymentLink = `${basePaymentUrl}/${verifiedSessionId}`;
                                     console.log('  - Updated Payment URL:', paymentLink);
                                 }
@@ -288,6 +291,7 @@ export const createBooking = async (req, res) => {
             success: true,
             message: "Payment link generated successfully",
             paymentLink: paymentLink,
+            paymentSessionId,
             tempBookingId: tempBookingId
         });
     } catch (error) {

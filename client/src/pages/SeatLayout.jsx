@@ -78,6 +78,17 @@ const SeatLayout = () => {
     }
   }
 
+  // Lazy-load Cashfree SDK
+  const loadCashfreeSdk = () => new Promise((resolve, reject) => {
+    if (window.Cashfree) return resolve(window.Cashfree);
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.async = true;
+    script.onload = () => resolve(window.Cashfree);
+    script.onerror = () => reject(new Error('Failed to load Cashfree SDK'));
+    document.body.appendChild(script);
+  });
+
   const bookTickets = async () => {
     try {
       if (!user) return toast.error("Please login to proceed")
@@ -97,7 +108,7 @@ const SeatLayout = () => {
 
       console.log('Booking response:', data);
 
-      if (data.success && data.paymentLink) {
+      if (data.success && (data.paymentSessionId || data.paymentLink)) {
         // Store tempBookingId in localStorage for potential recovery
         if (data.tempBookingId) {
           localStorage.setItem('pendingBookingId', data.tempBookingId);
@@ -106,27 +117,27 @@ const SeatLayout = () => {
           sessionStorage.setItem('paymentRedirect', 'true');
         }
 
-        // Validate payment URL before redirecting
-        if (!data.paymentLink.startsWith('https://payments.cashfree.com/session/')) {
-          console.error('Invalid payment URL format:', data.paymentLink);
-          toast.error('Invalid payment URL received. Please try again.');
+        // Preferred: use Cashfree SDK with paymentSessionId
+        if (data.paymentSessionId) {
+          try {
+            const Cashfree = await loadCashfreeSdk();
+            const cashfree = Cashfree({ mode: 'production' });
+            console.log('Opening Cashfree checkout with session:', data.paymentSessionId);
+            await cashfree.checkout({ paymentSessionId: data.paymentSessionId, redirectTarget: '_self' });
+            return; // control will go to redirect URL after payment
+          } catch (sdkErr) {
+            console.error('Cashfree SDK checkout failed, falling back to direct link:', sdkErr);
+          }
+        }
+
+        // Fallback: direct redirect to hosted checkout URL
+        if (data.paymentLink && data.paymentLink.startsWith('https://payments.cashfree.com/session/')) {
+          console.log('Redirecting to payment page (fallback):', data.paymentLink);
+          window.location.href = data.paymentLink;
           return;
         }
 
-        // Log before redirect
-        console.log('Redirecting to payment page:', data.paymentLink);
-
-        // Add a small delay before redirecting to ensure logs are visible
-        setTimeout(() => {
-          try {
-            // Redirect user to payment page
-            window.location.href = data.paymentLink;
-            console.log('Redirection initiated');
-          } catch (redirectError) {
-            console.error('Redirect error:', redirectError);
-            toast.error('Failed to open payment page. Please try again.');
-          }
-        }, 100);
+        toast.error('Could not open payment page. Please try again.');
       } else {
         console.error('Payment link generation failed:', data);
         toast.error(data.message || "Failed to generate payment link");
