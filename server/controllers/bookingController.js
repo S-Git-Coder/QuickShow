@@ -1,6 +1,8 @@
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import User from "../models/User.js";
+import crypto from 'crypto';
+import WebhookLog from "../models/WebhookLog.js";
 import axios from "axios";
 import mongoose from "mongoose";
 import cashfreeConfig from "../configs/cashfree.js";
@@ -460,30 +462,36 @@ export const getOccupiedSeats = async (req, res) => {
 // Handle webhook notifications from Cashfree (separate from redirect callback)
 export const handlePaymentWebhook = async (req, res) => {
     try {
-        // Check if this is a test request from Cashfree dashboard
-        // Cashfree dashboard sends a test request with specific headers
-        const isCashfreeTest = req.headers['x-webhook-source'] === 'cashfree' ||
-            req.headers['user-agent']?.includes('Cashfree');
-
-        if (isCashfreeTest) {
-            // Return HTTP 200 with a simple success message
-            // This is what Cashfree expects during webhook testing
-            return res.status(200).send('Webhook received successfully');
-        }
-
+        const rawBody = req.rawBody || JSON.stringify(req.body || {});
+        const headers = req.headers || {};
         const { orderId, orderAmount, referenceId, txStatus, paymentMode, txMsg, txTime, signature } = req.body;
 
-        // Check if this is a test webhook from our test script
-        const isTestWebhook = orderId?.includes('test');
+        // Log entry for observability
+        const logEntry = await WebhookLog.create({
+            provider: 'cashfree',
+            status: 'received',
+            orderId,
+            event: txStatus,
+            headers,
+            body: req.body
+        });
 
-        if (isTestWebhook) {
-            // For test webhooks, just return success
-            return res.json({
-                success: true,
-                message: `Test payment ${txStatus?.toLowerCase()} processed successfully`,
-                testMode: true,
-                apiVersion: req.headers['x-api-version'] || 'unknown'
-            });
+        // Verify signature when present (Cashfree v2 HMAC-SHA256 of raw body with secret)
+        try {
+            const secret = cashfreeConfig.webhookSecret || cashfreeConfig.secretKey;
+            if (signature && secret) {
+                const computed = crypto
+                    .createHmac('sha256', secret)
+                    .update(rawBody, 'utf8')
+                    .digest('base64');
+                if (computed !== signature) {
+                    await WebhookLog.findByIdAndUpdate(logEntry._id, { status: 'skipped', error: 'Invalid signature' });
+                    return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
+                }
+            }
+        } catch (sigErr) {
+            await WebhookLog.findByIdAndUpdate(logEntry._id, { status: 'error', error: `Signature verify error: ${sigErr.message}` });
+            return res.status(400).json({ success: false, message: 'Signature verification failed' });
         }
 
         // Extract booking ID from order_id (format: order_<bookingId>)
@@ -500,6 +508,7 @@ export const handlePaymentWebhook = async (req, res) => {
         const booking = await Booking.findById(bookingId);
 
         if (!booking) {
+            await WebhookLog.findByIdAndUpdate(logEntry._id, { status: 'error', error: 'Booking not found' });
             return res.status(404).json({ success: false, message: 'Booking not found' });
         }
 
@@ -530,9 +539,20 @@ export const handlePaymentWebhook = async (req, res) => {
             }
         }
 
-        await booking.save();
+        try {
+            await booking.save();
+        } catch (e) {
+            // Handle idempotency duplicate index on paymentDetails.orderId
+            if (e && e.code === 11000) {
+                await WebhookLog.findByIdAndUpdate(logEntry._id, { status: 'skipped', error: 'Duplicate orderId (idempotent)' });
+                return res.json({ success: true, message: 'Duplicate webhook ignored' });
+            }
+            await WebhookLog.findByIdAndUpdate(logEntry._id, { status: 'error', error: e.message });
+            throw e;
+        }
 
         // Return success response
+        await WebhookLog.findByIdAndUpdate(logEntry._id, { status: 'processed' });
         res.json({
             success: true,
             message: `Payment ${txStatus.toLowerCase()} for booking ${bookingId}`

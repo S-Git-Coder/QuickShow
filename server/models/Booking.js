@@ -9,6 +9,7 @@ const bookingSchema = new mongoose.Schema({
     paymentLink: { type: String },
     paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
     paymentDetails: {
+        orderId: { type: String },
         referenceId: { type: String },
         paymentMode: { type: String },
         txMsg: { type: String },
@@ -16,6 +17,9 @@ const bookingSchema = new mongoose.Schema({
         signature: { type: String }
     }
 }, { timestamps: true })
+
+// Idempotency: prevent duplicate updates for the same orderId
+bookingSchema.index({ 'paymentDetails.orderId': 1 }, { unique: true, sparse: true });
 
 const Booking = mongoose.model('Booking', bookingSchema);
 

@@ -87,7 +87,7 @@ const MyBookings = () => {
           <div className='flex flex-col md:items-end md:text-right justify-between p-4'>
             <div className='flex items-center gap-4'>
               <p className='text-2xl font-semibold mb-3'>{currency}{item.amount}</p>
-              {!item.isPaid && (
+              {(!item.isPaid && item.paymentLink) && (
                 <button
                   onClick={() => {
                     if (item.paymentLink) {

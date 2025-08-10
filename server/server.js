@@ -13,13 +13,31 @@ import showRouter from './routes/showRoutes.js';
 import bookingRouter from './routes/bookingRoutes.js';
 import adminRouter from './routes/adminRoutes.js';
 import userRouter from './routes/userRoutes.js';
-import testRouter from './routes/testRoutes.js';
+// import testRouter from './routes/testRoutes.js';
 
 const app = express();
 const port = 3000;
 
 // Middleware
-app.use(express.json())
+// Capture raw body for specific webhook route for signature verification
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/booking/webhook' && req.method === 'POST') {
+    let data = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => { data += chunk; });
+    req.on('end', () => {
+      req.rawBody = data;
+      try {
+        req.body = JSON.parse(data || '{}');
+      } catch (_) {
+        req.body = {};
+      }
+      next();
+    });
+  } else {
+    express.json()(req, res, next);
+  }
+});
 
 // Configure CORS with specific options for production
 const corsOptions = {
@@ -71,7 +89,7 @@ app.use('/api/show', showRouter)
 app.use('/api/booking', bookingRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/user', userRouter)
-app.use('/api/test', testRouter)
+// app.use('/api/test', testRouter)
 
 // Lightweight health check endpoint
 app.get('/api/health', async (req, res) => {

@@ -1,5 +1,7 @@
 import { Inngest } from "inngest";
 import User from "../models/User.js";
+import Booking from "../models/Booking.js";
+import Show from "../models/Show.js";
 import { model } from "mongoose";
 import sendEmail from "../configs/nodeMailer.js";
 
@@ -178,3 +180,28 @@ const sendNewShowNotifications = inngest.createFunction(
 
 
 export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation, sendBookingConfirmationEmail, sendShowReminders, sendNewShowNotifications];
+
+// Cleanup stale pending bookings (older than 30 minutes)
+const cleanupStaleBookings = inngest.createFunction(
+    { id: "cleanup-stale-bookings" },
+    { cron: "*/15 * * * *" }, // every 15 minutes
+    async () => {
+        const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+        const stale = await Booking.find({ isPaid: false, paymentStatus: 'pending', createdAt: { $lt: cutoff } });
+
+        let cleaned = 0;
+        for (const b of stale) {
+            // Optionally free up seats if they were tentatively held (if you had such a mechanism). Here we only mark failed.
+            b.paymentStatus = 'failed';
+            await b.save();
+            cleaned++;
+        }
+
+        return { cleaned };
+    }
+);
+
+export const scheduled = [cleanupStaleBookings];
+
+// Also expose cleanup in main functions list for the serve() registration
+functions.push(cleanupStaleBookings);
