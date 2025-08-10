@@ -17,8 +17,24 @@ import testRouter from './routes/testRoutes.js';
 const app = express();
 const port = 3000;
 
-// Connect to database
-connectDB()
+// Connect to database with error handling
+let dbConnected = false;
+
+// Attempt to connect to the database
+const initializeDatabase = async () => {
+  try {
+    await connectDB();
+    dbConnected = true;
+    console.log('Database initialization successful');
+  } catch (error) {
+    console.error('Failed to initialize database:', error.message);
+    dbConnected = false;
+    // Don't exit the process, let the app continue with degraded functionality
+  }
+};
+
+// Initialize database connection
+initializeDatabase();
 
 // Middleware
 app.use(express.json())

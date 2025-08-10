@@ -7,9 +7,43 @@ import User from "../models/User.js";
 export const syncUser = async (req, res) => {
     try {
         const { userId, name, email, image, phone } = req.body;
-        let user = await User.findById(userId);
+        
+        // Set timeout for database operations
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Database operation timed out')), 5000);
+        });
+        
+        // Find user with timeout protection
+        let user;
+        try {
+            user = await Promise.race([
+                User.findById(userId),
+                timeoutPromise
+            ]);
+        } catch (findError) {
+            console.error('Error finding user:', findError.message);
+            return res.json({ 
+                success: false, 
+                message: findError.message,
+                userData: { userId, name, email } // Return the user data we received
+            });
+        }
+        
+        // If user doesn't exist, create a new one
         if (!user) {
-            user = await User.create({ _id: userId, name, email, image, phone });
+            try {
+                user = await Promise.race([
+                    User.create({ _id: userId, name, email, image, phone }),
+                    timeoutPromise
+                ]);
+            } catch (createError) {
+                console.error('Error creating user:', createError.message);
+                return res.json({ 
+                    success: false, 
+                    message: createError.message,
+                    userData: { userId, name, email } // Return the user data we received
+                });
+            }
         } else {
             // Update user data including phone if it exists
             user.name = name;
@@ -18,11 +52,30 @@ export const syncUser = async (req, res) => {
             if (phone) {
                 user.phone = phone;
             }
-            await user.save();
+            
+            try {
+                await Promise.race([
+                    user.save(),
+                    timeoutPromise
+                ]);
+            } catch (saveError) {
+                console.error('Error saving user:', saveError.message);
+                return res.json({ 
+                    success: false, 
+                    message: saveError.message,
+                    userData: { userId, name, email, image, phone } // Return the user data we received
+                });
+            }
         }
+        
         res.json({ success: true, user });
     } catch (error) {
-        res.json({ success: false, message: error.message });
+        console.error('Unexpected error in syncUser:', error.message);
+        res.json({ 
+            success: false, 
+            message: error.message,
+            userData: req.body // Return the user data we received
+        });
     }
 }
 

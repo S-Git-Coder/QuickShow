@@ -137,16 +137,27 @@ export const AppProvider = ({ children }) => {
         })
         .catch(error => {
             console.error('Error syncing user:', error);
+            // Even if the database sync fails, we can still use client-side user data
+            // and allow the user to continue using the app with limited functionality
+            console.log('Continuing with client-side user data due to sync failure');
+            
+            // Still handle pending orders even if sync failed
+            if (pendingOrderId && paymentRedirect === 'true') {
+                sessionStorage.removeItem('paymentRedirect');
+                navigate(`/my-bookings?orderId=${pendingOrderId}`);
+            }
+        })
+        .finally(() => {
+            // Try to fetch admin status and favorite movies regardless of sync success or failure
+            // These will handle their own errors internally
+            console.log('Fetching admin status and favorites regardless of sync result...');
+            fetchIsAdmin();
+            fetchFavoriteMovies();
         });
-        
-        console.log('Fetching admin status...');
-        fetchIsAdmin();
-        console.log('Fetching favorite movies...');
-        fetchFavoriteMovies();
     } else {
         console.log('No user authenticated, skipping data fetching');
     }
-}, [user]);
+}, [user, navigate]);
 
     const value = {
         axios,
