@@ -89,7 +89,7 @@ const SeatLayout = () => {
 
       // Log the request being made
       console.log('Sending booking request:', { showId: selectedTime.showId, selectedSeats });
-      
+
       const { data } = await axios.post('/api/booking/create', { showId: selectedTime.showId, selectedSeats }, { headers: { Authorization: `Bearer ${await getToken()}` } });
 
       // Dismiss loading toast
@@ -105,17 +105,17 @@ const SeatLayout = () => {
           sessionStorage.setItem('pendingOrderId', `order_${data.tempBookingId}`);
           sessionStorage.setItem('paymentRedirect', 'true');
         }
-        
+
         // Validate payment URL before redirecting
-        if (!data.paymentLink.startsWith('https://payments.cashfree.com/pay/')) {
+        if (!data.paymentLink.startsWith('https://payments.cashfree.com/session/')) {
           console.error('Invalid payment URL format:', data.paymentLink);
           toast.error('Invalid payment URL received. Please try again.');
           return;
         }
-        
+
         // Log before redirect
         console.log('Redirecting to payment page:', data.paymentLink);
-        
+
         // Add a small delay before redirecting to ensure logs are visible
         setTimeout(() => {
           try {
@@ -133,16 +133,16 @@ const SeatLayout = () => {
       }
     } catch (error) {
       console.error('Booking error:', error);
-      
+
       // Extract the most useful error message
       let errorMessage = "An error occurred while processing your request";
-      
+
       if (error?.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error?.message) {
         errorMessage = error.message;
       }
-      
+
       toast.error(errorMessage);
     }
   }

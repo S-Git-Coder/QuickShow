@@ -36,15 +36,15 @@ export const createBooking = async (req, res) => {
         }
 
         const showData = await Show.findById(showId).populate('movie');
-        
+
         // Calculate the amount but don't create the booking yet
         const amount = showData.showPrice * selectedSeats.length;
-        
+
         const user = await User.findById(userId);
         if (!user) {
             return res.json({ success: false, message: "User not found" });
         }
-        
+
         // Create a temporary booking ID for Cashfree order
         const tempBookingId = new mongoose.Types.ObjectId();
 
@@ -74,7 +74,7 @@ export const createBooking = async (req, res) => {
             amount,
             createdAt: new Date()
         };
-        
+
         const orderPayload = {
             order_id: `order_${tempBookingId}`,
             order_amount: amount,
@@ -100,7 +100,7 @@ export const createBooking = async (req, res) => {
             console.log('- Secret Key Length:', cashfreeConfig.secretKey ? cashfreeConfig.secretKey.length : 'Not set');
             console.log('- API Version: 2023-08-01');
             console.log('- Base URL:', cashfreeConfig.baseUrl);
-            
+
             // Prepare headers for Cashfree API - always use production credentials
             // Log the credentials being used (masked for security)
             console.log('Using Cashfree credentials:');
@@ -108,7 +108,7 @@ export const createBooking = async (req, res) => {
             console.log('- Secret Key Length:', cashfreeConfig.secretKey ? cashfreeConfig.secretKey.length : 'Not set');
             console.log('- API Version:', '2023-08-01');
             console.log('- Base URL:', cashfreeConfig.baseUrl);
-            
+
             const headers = {
                 "x-client-id": cashfreeConfig.appId,
                 "x-client-secret": cashfreeConfig.secretKey,
@@ -127,11 +127,12 @@ export const createBooking = async (req, res) => {
                 // Always use the production payment URL when in production mode
                 // This is critical for authentication to work correctly
                 const isProduction = process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true';
-                
+
                 // Use the appropriate payment URL - always use production URL with production credentials
                 // This ensures we're using the correct endpoint that matches our credentials
-                const basePaymentUrl = 'https://payments.cashfree.com/pay';
-                
+                // Per Cashfree PG docs, redirect URL format uses /session/<payment_session_id>
+                const basePaymentUrl = 'https://payments.cashfree.com/session';
+
                 // Enhanced debugging for payment session
                 console.log('🔍 PAYMENT SESSION DEBUG:');
                 console.log('- Environment check:');
@@ -144,12 +145,12 @@ export const createBooking = async (req, res) => {
                 console.log('  - Payment Session ID:', cashfreeRes.data.payment_session_id);
                 console.log('  - Payment Session ID Length:', cashfreeRes.data.payment_session_id.length);
                 console.log('  - Raw Payment Session ID:', JSON.stringify(cashfreeRes.data.payment_session_id));
-                
+
                 // Construct payment URL - ensure proper formatting with a slash between base URL and session ID
                 const sessionId = cashfreeRes.data.payment_session_id.trim();
                 paymentLink = `${basePaymentUrl}/${sessionId}`;
                 console.log('- Generated Payment URL:', paymentLink);
-                
+
                 // Verify the payment URL is valid
                 try {
                     // Make a HEAD request to check if the URL is accessible
@@ -159,7 +160,7 @@ export const createBooking = async (req, res) => {
                             // First verify the session is valid with Cashfree
                             const sessionDetails = await axios.get(
                                 `${cashfreeConfig.baseUrl}/orders/${cashfreeRes.data.order_id}`,
-                                { 
+                                {
                                     headers: {
                                         "x-client-id": cashfreeConfig.appId,
                                         "x-client-secret": cashfreeConfig.secretKey,
@@ -169,10 +170,10 @@ export const createBooking = async (req, res) => {
                                     timeout: 5000
                                 }
                             );
-                            
+
                             console.log('  - Session Details:', JSON.stringify(sessionDetails.data));
                             console.log('  - Session Status:', sessionDetails.data.order_status);
-                            
+
                             if (sessionDetails.data.payment_session_id) {
                                 // If the session details contain a payment_session_id, use that one (it might be different)
                                 const verifiedSessionId = sessionDetails.data.payment_session_id.trim();
@@ -184,7 +185,7 @@ export const createBooking = async (req, res) => {
                                     console.log('  - Updated Payment URL:', paymentLink);
                                 }
                             }
-                            
+
                             // Now try to verify the URL is accessible
                             try {
                                 const verifyResponse = await axios.head(paymentLink, { timeout: 5000 });
@@ -198,7 +199,7 @@ export const createBooking = async (req, res) => {
                         } catch (sessionError) {
                             console.error('  - Failed to get session details:', sessionError.message);
                             console.error('  - Status:', sessionError.response ? sessionError.response.status : 'No response');
-                            
+
                             // Try direct URL verification as fallback
                             try {
                                 const verifyResponse = await axios.head(paymentLink, { timeout: 5000 });
@@ -210,13 +211,13 @@ export const createBooking = async (req, res) => {
                             }
                         }
                     };
-                    
+
                     // Execute verification asynchronously (don't wait for it)
                     verifyUrl();
                 } catch (error) {
                     console.error('- Error during URL verification setup:', error.message);
                 }
-                
+
                 // Store the payment session ID in the session for verification later
                 if (req.session && req.session.pendingBooking) {
                     req.session.pendingBooking.paymentSessionId = cashfreeRes.data.payment_session_id;
@@ -233,10 +234,10 @@ export const createBooking = async (req, res) => {
             console.error('Cashfree API error:', error.message);
             console.error('Cashfree API error status:', error.response ? error.response.status : 'No status');
             console.error('Cashfree API error data:', error.response ? JSON.stringify(error.response.data) : 'No response data');
-            
+
             // Check for specific error types to provide better error messages
             let errorMessage = "Payment gateway error. Please try again later.";
-            
+
             if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
                 errorMessage = "Unable to connect to payment gateway. Please check your internet connection and try again.";
                 console.error('NETWORK ERROR: Unable to connect to Cashfree API');
@@ -246,9 +247,9 @@ export const createBooking = async (req, res) => {
                     errorMessage = "Payment authentication failed. Please contact support.";
                     console.error('CRITICAL: Cashfree API authentication failed. Check API credentials.');
                     console.error('Auth Error Details:', JSON.stringify(error.response.data));
-                    
+
                     // Log the exact credentials being used (partially masked)
-                    const appIdMasked = cashfreeConfig.appId ? 
+                    const appIdMasked = cashfreeConfig.appId ?
                         `${cashfreeConfig.appId.substring(0, 6)}...${cashfreeConfig.appId.substring(cashfreeConfig.appId.length - 4)}` : 'Not set';
                     console.error('Credentials used for failed request:');
                     console.error('- App ID:', appIdMasked);
@@ -261,7 +262,7 @@ export const createBooking = async (req, res) => {
                     console.error(`HTTP ERROR ${error.response.status}: Cashfree API request failed`, JSON.stringify(error.response.data));
                 }
             }
-            
+
             return res.json({
                 success: false,
                 message: errorMessage,
@@ -273,7 +274,7 @@ export const createBooking = async (req, res) => {
         // --------- Cashfree Order Create Logic END ---------
 
         // Validate payment link before returning to client
-        if (!paymentLink || !paymentLink.startsWith('https://payments.cashfree.com/pay/')) {
+        if (!paymentLink || !paymentLink.startsWith('https://payments.cashfree.com/session/')) {
             console.error('❌ Invalid payment link format:', paymentLink);
             return res.json({
                 success: false,
@@ -281,7 +282,7 @@ export const createBooking = async (req, res) => {
                 error: "Invalid payment URL format"
             });
         }
-        
+
         // Return success response with payment link only
         return res.json({
             success: true,
@@ -319,17 +320,17 @@ export const createBooking = async (req, res) => {
 export const handlePaymentCallback = async (req, res) => {
     try {
         const { order_id } = req.query;
-        
+
         if (!order_id) {
             return res.status(400).json({
                 success: false,
                 message: "Order ID is required"
             });
         }
-        
+
         // Extract tempBookingId from order_id (format: order_<tempBookingId>)
         const tempBookingId = order_id.replace('order_', '');
-        
+
         // Get pending booking data from session
         if (!req.session || !req.session.pendingBooking || req.session.pendingBooking.tempBookingId !== tempBookingId) {
             return res.status(400).json({
@@ -337,9 +338,9 @@ export const handlePaymentCallback = async (req, res) => {
                 message: "Invalid or expired booking session"
             });
         }
-        
+
         const pendingBooking = req.session.pendingBooking;
-        
+
         // Verify payment status with Cashfree
         const headers = {
             "x-client-id": cashfreeConfig.appId,
@@ -347,41 +348,41 @@ export const handlePaymentCallback = async (req, res) => {
             "x-api-version": "2023-08-01",
             "Content-Type": "application/json"
         };
-        
+
         const paymentVerification = await axios.get(
             `${cashfreeConfig.baseUrl}/orders/${order_id}`,
             { headers }
         );
-        
+
         // Check if payment is successful
         if (paymentVerification.data.order_status === 'PAID') {
             // Get user and show data
             const user = await User.findById(pendingBooking.userId);
             const show = await Show.findById(pendingBooking.showId);
-            
+
             if (!user || !show) {
                 return res.status(404).json({
                     success: false,
                     message: "User or Show not found"
                 });
             }
-            
+
             // Check if seats are still available
             const bookedSeats = await Booking.find({ show: pendingBooking.showId }).distinct('bookedSeats');
             const flattenedBookedSeats = bookedSeats.flat();
-            
+
             // Check if any selected seat is already booked
-            const unavailableSeats = pendingBooking.selectedSeats.filter(seat => 
+            const unavailableSeats = pendingBooking.selectedSeats.filter(seat =>
                 flattenedBookedSeats.includes(seat)
             );
-            
+
             if (unavailableSeats.length > 0) {
                 return res.status(400).json({
                     success: false,
                     message: `Seats ${unavailableSeats.join(', ')} are no longer available`
                 });
             }
-            
+
             // Create the booking now that payment is confirmed
             const booking = await Booking.create({
                 user: pendingBooking.userId,
@@ -397,10 +398,10 @@ export const handlePaymentCallback = async (req, res) => {
                     paymentTime: new Date()
                 }
             });
-            
+
             // Clear the pending booking from session
             delete req.session.pendingBooking;
-            
+
             // Redirect to success page
             return res.redirect(`/booking-success/${booking._id}`);
         } else {
@@ -521,23 +522,23 @@ export const verifyPayment = async (req, res) => {
             "x-api-version": "2023-08-01",
             "Content-Type": "application/json"
         };
-        
+
         try {
             const paymentVerification = await axios.get(
                 `${cashfreeConfig.baseUrl}/orders/${orderId}`,
                 { headers }
             );
-            
+
             // Check if payment is successful
             if (paymentVerification.data.order_status === 'PAID') {
                 // Extract tempBookingId from order_id (format: order_<tempBookingId>)
                 const tempBookingId = orderId.replace('order_', '');
-                
+
                 // Check if booking already exists
                 const existingBooking = await Booking.findOne({
                     'paymentDetails.orderId': orderId
                 });
-                
+
                 if (existingBooking) {
                     return res.json({
                         success: true,
@@ -545,7 +546,7 @@ export const verifyPayment = async (req, res) => {
                         booking: existingBooking
                     });
                 }
-                
+
                 // If no booking exists but payment is successful, we need to recover from session or localStorage
                 return res.json({
                     success: true,
@@ -566,12 +567,12 @@ export const verifyPayment = async (req, res) => {
             // If Cashfree API call fails, check if booking exists in our database
             // Extract tempBookingId from order_id (format: order_<tempBookingId>)
             const tempBookingId = orderId.replace('order_', '');
-            
+
             // Check if booking exists
             const existingBooking = await Booking.findOne({
                 'paymentDetails.orderId': orderId
             });
-            
+
             if (existingBooking) {
                 return res.json({
                     success: true,
@@ -600,23 +601,23 @@ export const verifyPayment = async (req, res) => {
 export const verifyBookingPayment = async (req, res) => {
     try {
         const { bookingId } = req.params;
-        
+
         if (!bookingId) {
             return res.status(400).json({
                 success: false,
                 message: "Booking ID is required"
             });
         }
-        
+
         const booking = await Booking.findById(bookingId);
-        
+
         if (!booking) {
             return res.status(404).json({
                 success: false,
                 message: "Booking not found"
             });
         }
-        
+
         // For debugging purposes, assume payment was successful if booking exists
         // This is a temporary solution for the stuck loading issue
         if (!booking.isPaid) {
