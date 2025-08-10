@@ -130,15 +130,92 @@ export const createBooking = async (req, res) => {
                 
                 // Use the appropriate payment URL - always use production URL with production credentials
                 // This ensures we're using the correct endpoint that matches our credentials
-                const basePaymentUrl = 'https://payments.cashfree.com/pay/';
+                const basePaymentUrl = 'https://payments.cashfree.com/pay';
                 
-                console.log('Environment check:');
-                console.log('- Is Production:', isProduction);
-                console.log('- Using Payment URL:', basePaymentUrl);
+                // Enhanced debugging for payment session
+                console.log('🔍 PAYMENT SESSION DEBUG:');
+                console.log('- Environment check:');
+                console.log('  - Is Production:', isProduction);
+                console.log('  - NODE_ENV:', process.env.NODE_ENV);
+                console.log('  - CASHFREE_USE_PRODUCTION:', process.env.CASHFREE_USE_PRODUCTION);
+                console.log('- Cashfree Response:');
+                console.log('  - Order ID:', cashfreeRes.data.order_id);
+                console.log('  - Order Status:', cashfreeRes.data.order_status);
+                console.log('  - Payment Session ID:', cashfreeRes.data.payment_session_id);
+                console.log('  - Payment Session ID Length:', cashfreeRes.data.payment_session_id.length);
+                console.log('  - Raw Payment Session ID:', JSON.stringify(cashfreeRes.data.payment_session_id));
                 
-                console.log('Using payment URL:', basePaymentUrl);
-                console.log('Payment session ID:', cashfreeRes.data.payment_session_id);
-                paymentLink = `${basePaymentUrl}${cashfreeRes.data.payment_session_id}`;
+                // Construct payment URL - ensure proper formatting with a slash between base URL and session ID
+                const sessionId = cashfreeRes.data.payment_session_id.trim();
+                paymentLink = `${basePaymentUrl}/${sessionId}`;
+                console.log('- Generated Payment URL:', paymentLink);
+                
+                // Verify the payment URL is valid
+                try {
+                    // Make a HEAD request to check if the URL is accessible
+                    console.log('- Verifying payment URL accessibility...');
+                    const verifyUrl = async () => {
+                        try {
+                            // First verify the session is valid with Cashfree
+                            const sessionDetails = await axios.get(
+                                `${cashfreeConfig.baseUrl}/orders/${cashfreeRes.data.order_id}`,
+                                { 
+                                    headers: {
+                                        "x-client-id": cashfreeConfig.appId,
+                                        "x-client-secret": cashfreeConfig.secretKey,
+                                        "x-api-version": "2023-08-01",
+                                        "Content-Type": "application/json"
+                                    },
+                                    timeout: 5000
+                                }
+                            );
+                            
+                            console.log('  - Session Details:', JSON.stringify(sessionDetails.data));
+                            console.log('  - Session Status:', sessionDetails.data.order_status);
+                            
+                            if (sessionDetails.data.payment_session_id) {
+                                // If the session details contain a payment_session_id, use that one (it might be different)
+                                const verifiedSessionId = sessionDetails.data.payment_session_id.trim();
+                                if (verifiedSessionId !== sessionId) {
+                                    console.log('  - ⚠️ Session ID mismatch, updating to verified ID');
+                                    console.log('  - Original:', sessionId);
+                                    console.log('  - Verified:', verifiedSessionId);
+                                    paymentLink = `${basePaymentUrl}/${verifiedSessionId}`;
+                                    console.log('  - Updated Payment URL:', paymentLink);
+                                }
+                            }
+                            
+                            // Now try to verify the URL is accessible
+                            try {
+                                const verifyResponse = await axios.head(paymentLink, { timeout: 5000 });
+                                console.log('  - URL Verification Status:', verifyResponse.status);
+                                console.log('  - URL is accessible ✅');
+                            } catch (urlError) {
+                                console.error('  - URL Verification Failed ❌');
+                                console.error('  - Status:', urlError.response ? urlError.response.status : 'No response');
+                                console.error('  - Error:', urlError.message);
+                            }
+                        } catch (sessionError) {
+                            console.error('  - Failed to get session details:', sessionError.message);
+                            console.error('  - Status:', sessionError.response ? sessionError.response.status : 'No response');
+                            
+                            // Try direct URL verification as fallback
+                            try {
+                                const verifyResponse = await axios.head(paymentLink, { timeout: 5000 });
+                                console.log('  - Fallback URL Verification Status:', verifyResponse.status);
+                                console.log('  - URL is accessible via fallback check ✅');
+                            } catch (urlError) {
+                                console.error('  - Fallback URL Verification Failed ❌');
+                                console.error('  - Status:', urlError.response ? urlError.response.status : 'No response');
+                            }
+                        }
+                    };
+                    
+                    // Execute verification asynchronously (don't wait for it)
+                    verifyUrl();
+                } catch (error) {
+                    console.error('- Error during URL verification setup:', error.message);
+                }
                 
                 // Store the payment session ID in the session for verification later
                 if (req.session && req.session.pendingBooking) {
@@ -195,6 +272,16 @@ export const createBooking = async (req, res) => {
 
         // --------- Cashfree Order Create Logic END ---------
 
+        // Validate payment link before returning to client
+        if (!paymentLink || !paymentLink.startsWith('https://payments.cashfree.com/pay/')) {
+            console.error('❌ Invalid payment link format:', paymentLink);
+            return res.json({
+                success: false,
+                message: "Failed to generate a valid payment link. Please try again.",
+                error: "Invalid payment URL format"
+            });
+        }
+        
         // Return success response with payment link only
         return res.json({
             success: true,

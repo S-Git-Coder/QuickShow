@@ -50,4 +50,26 @@ if (productionConfig.secretKey) {
 // Always use production configuration
 const cashfreeConfig = productionConfig;
 
+// Validate and normalize the configuration
+if (cashfreeConfig.appId) {
+    cashfreeConfig.appId = cashfreeConfig.appId.trim();
+}
+
+if (cashfreeConfig.secretKey) {
+    cashfreeConfig.secretKey = cashfreeConfig.secretKey.trim();
+}
+
+// Ensure the baseUrl is correct for the API version we're using
+if (!cashfreeConfig.baseUrl.endsWith('/pg')) {
+    cashfreeConfig.baseUrl = cashfreeConfig.baseUrl.endsWith('/') 
+        ? `${cashfreeConfig.baseUrl}pg` 
+        : `${cashfreeConfig.baseUrl}/pg`;
+}
+
+// Log the final configuration
+console.log('Final Cashfree Configuration:');
+console.log('- App ID:', cashfreeConfig.appId ? `${cashfreeConfig.appId.substring(0, 6)}...${cashfreeConfig.appId.substring(cashfreeConfig.appId.length - 4)}` : 'Not set');
+console.log('- Secret Key Length:', cashfreeConfig.secretKey ? cashfreeConfig.secretKey.length : 'Not set');
+console.log('- Base URL:', cashfreeConfig.baseUrl);
+
 export default cashfreeConfig;

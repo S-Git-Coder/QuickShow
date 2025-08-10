@@ -101,6 +101,16 @@ const SeatLayout = () => {
         // Store tempBookingId in localStorage for potential recovery
         if (data.tempBookingId) {
           localStorage.setItem('pendingBookingId', data.tempBookingId);
+          // Also store in sessionStorage for more reliable recovery
+          sessionStorage.setItem('pendingOrderId', `order_${data.tempBookingId}`);
+          sessionStorage.setItem('paymentRedirect', 'true');
+        }
+        
+        // Validate payment URL before redirecting
+        if (!data.paymentLink.startsWith('https://payments.cashfree.com/pay/')) {
+          console.error('Invalid payment URL format:', data.paymentLink);
+          toast.error('Invalid payment URL received. Please try again.');
+          return;
         }
         
         // Log before redirect
@@ -108,8 +118,14 @@ const SeatLayout = () => {
         
         // Add a small delay before redirecting to ensure logs are visible
         setTimeout(() => {
-          // Redirect user to payment page
-          window.location.href = data.paymentLink;
+          try {
+            // Redirect user to payment page
+            window.location.href = data.paymentLink;
+            console.log('Redirection initiated');
+          } catch (redirectError) {
+            console.error('Redirect error:', redirectError);
+            toast.error('Failed to open payment page. Please try again.');
+          }
         }, 100);
       } else {
         console.error('Payment link generation failed:', data);
