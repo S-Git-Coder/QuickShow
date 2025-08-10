@@ -25,6 +25,8 @@ const MyBookings = () => {
       window.history.replaceState({}, document.title, '/my-bookings')
       sessionStorage.removeItem('pendingOrderId')
       sessionStorage.removeItem('paymentRedirect')
+      // Trigger a quick background verify to flip Pending → Paid if webhook is slow
+      axios.get(`/api/booking/verify/${orderId}`).catch(() => { })
     }
   }, [orderId])
 

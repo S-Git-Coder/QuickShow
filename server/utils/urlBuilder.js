@@ -25,7 +25,7 @@ const getBaseUrls = () => {
         process.env.CASHFREE_USE_PRODUCTION === 'true';
 
     let clientUrl, serverUrl;
-    
+
     if (isProduction) {
         clientUrl = process.env.CLIENT_URL || 'https://quickshow-pied.vercel.app';
         serverUrl = process.env.SERVER_URL || 'https://quickshow-server-alpha-three.vercel.app';
@@ -33,12 +33,12 @@ const getBaseUrls = () => {
         clientUrl = process.env.CLIENT_URL || process.env.VITE_CLIENT_URL || 'http://localhost:5174';
         serverUrl = process.env.SERVER_URL || 'http://localhost:3000';
     }
-    
+
     // Log the URLs being used
     console.log('URL Configuration:');
     console.log('- Client URL:', clientUrl);
     console.log('- Server URL:', serverUrl);
-    
+
     return { clientUrl, serverUrl };
 };
 
@@ -52,10 +52,10 @@ const buildReturnUrl = (orderId) => {
     const isProduction = process.env.NODE_ENV === 'production' ||
         process.env.VERCEL_ENV === 'production' ||
         process.env.CASHFREE_USE_PRODUCTION === 'true';
-    
+
     // Check if we're using localhost
     const isLocalhost = clientUrl.includes('localhost');
-    
+
     // Force https for production or when CASHFREE_USE_PRODUCTION is true, but only if not localhost
     if (isProduction && !isLocalhost) {
         // If clientUrl already starts with https, use it as is
@@ -72,7 +72,7 @@ const buildReturnUrl = (orderId) => {
             return `https://${clientUrl}/my-bookings?orderId=${orderId}`;
         }
     }
-    
+
     return `${clientUrl}/my-bookings?orderId=${orderId}`;
 };
 
@@ -85,28 +85,28 @@ const buildNotifyUrl = () => {
     const isProduction = process.env.NODE_ENV === 'production' ||
         process.env.VERCEL_ENV === 'production' ||
         process.env.CASHFREE_USE_PRODUCTION === 'true';
-    
+
     // Check if we're using localhost
     const isLocalhost = serverUrl.includes('localhost');
-    
+
     // Force https for production or when CASHFREE_USE_PRODUCTION is true, but only if not localhost
     if (isProduction && !isLocalhost) {
         // If serverUrl already starts with https, use it as is
         if (serverUrl.startsWith('https://')) {
-            return `${serverUrl}/api/booking/callback`;
+            return `${serverUrl}/api/booking/webhook`;
         }
         // Otherwise, replace http:// with https://
         else if (serverUrl.startsWith('http://')) {
             const httpsUrl = serverUrl.replace('http://', 'https://');
-            return `${httpsUrl}/api/booking/callback`;
+            return `${httpsUrl}/api/booking/webhook`;
         }
         // If no protocol, assume https
         else {
-            return `https://${serverUrl}/api/booking/callback`;
+            return `https://${serverUrl}/api/booking/webhook`;
         }
     }
-    
-    return `${serverUrl}/api/booking/callback`;
+
+    return `${serverUrl}/api/booking/webhook`;
 };
 
 /**

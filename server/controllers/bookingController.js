@@ -63,8 +63,18 @@ export const createBooking = async (req, res) => {
             notifyUrl
         });
 
-        // Store booking data in session for later creation after payment
-        // We'll use this data in the payment callback
+        // Create a pending booking right away so it's visible in MyBookings
+        const pendingBookingDoc = await Booking.create({
+            _id: tempBookingId,
+            user: userId,
+            show: showId,
+            amount,
+            bookedSeats: selectedSeats,
+            paymentStatus: 'pending',
+            isPaid: false
+        });
+
+        // Also keep data in session for callback-based flow as fallback
         req.session = req.session || {};
         req.session.pendingBooking = {
             tempBookingId: tempBookingId.toString(),
@@ -226,6 +236,8 @@ export const createBooking = async (req, res) => {
                     req.session.pendingBooking.paymentSessionId = cashfreeRes.data.payment_session_id;
                     req.session.pendingBooking.paymentLink = paymentLink;
                 }
+                // Save payment link to pending booking for Pay Now retry
+                await Booking.findByIdAndUpdate(tempBookingId, { paymentLink });
             } else {
                 paymentLink = null;
                 return res.json({
@@ -387,21 +399,32 @@ export const handlePaymentCallback = async (req, res) => {
                 });
             }
 
-            // Create the booking now that payment is confirmed
-            const booking = await Booking.create({
-                user: pendingBooking.userId,
-                show: pendingBooking.showId,
-                amount: pendingBooking.amount,
-                bookedSeats: pendingBooking.selectedSeats,
-                paymentStatus: 'paid',
-                paymentLink: pendingBooking.paymentLink,
-                paymentDetails: {
-                    orderId: order_id,
-                    paymentId: paymentVerification.data.cf_payment_id,
-                    paymentMethod: paymentVerification.data.payment_method,
-                    paymentTime: new Date()
-                }
-            });
+            // Update the already created pending booking to paid
+            const booking = await Booking.findByIdAndUpdate(
+                pendingBooking.tempBookingId,
+                {
+                    paymentStatus: 'paid',
+                    isPaid: true,
+                    paymentLink: pendingBooking.paymentLink,
+                    paymentDetails: {
+                        ...(pendingBooking.paymentDetails || {}),
+                        orderId: order_id,
+                        paymentId: paymentVerification.data.cf_payment_id,
+                        paymentMethod: paymentVerification.data.payment_method,
+                        paymentTime: new Date()
+                    }
+                },
+                { new: true }
+            );
+
+            // Also mark seats as occupied on the show
+            const showToUpdate = await Show.findById(pendingBooking.showId);
+            if (showToUpdate) {
+                const occupied = { ...(showToUpdate.occupiedSeats || {}) };
+                for (const seat of pendingBooking.selectedSeats) occupied[seat] = true;
+                showToUpdate.occupiedSeats = occupied;
+                await showToUpdate.save();
+            }
 
             // Clear the pending booking from session
             delete req.session.pendingBooking;
@@ -487,12 +510,25 @@ export const handlePaymentWebhook = async (req, res) => {
         booking.paymentStatus = newPaymentStatus;
         booking.isPaid = newIsPaid; // Sync isPaid with paymentStatus
         booking.paymentDetails = {
+            ...(booking.paymentDetails || {}),
+            orderId: orderId,
             referenceId,
             paymentMode,
             txMsg,
             txTime,
             signature
         };
+
+        // If paid, mark seats as occupied on the show
+        if (newIsPaid) {
+            const show = await Show.findById(booking.show);
+            if (show) {
+                const occupied = { ...(show.occupiedSeats || {}) };
+                for (const seat of booking.bookedSeats) occupied[seat] = true;
+                show.occupiedSeats = occupied;
+                await show.save();
+            }
+        }
 
         await booking.save();
 
@@ -538,26 +574,46 @@ export const verifyPayment = async (req, res) => {
                 // Extract tempBookingId from order_id (format: order_<tempBookingId>)
                 const tempBookingId = orderId.replace('order_', '');
 
-                // Check if booking already exists
-                const existingBooking = await Booking.findOne({
-                    'paymentDetails.orderId': orderId
-                });
+                // Try to find the pending booking by _id first
+                let booking = await Booking.findById(tempBookingId);
 
-                if (existingBooking) {
+                if (booking) {
+                    if (!booking.isPaid) {
+                        booking.isPaid = true;
+                        booking.paymentStatus = 'paid';
+                        booking.paymentDetails = {
+                            ...(booking.paymentDetails || {}),
+                            orderId,
+                            paymentId: paymentVerification.data.cf_payment_id,
+                            paymentMethod: paymentVerification.data.payment_method,
+                            paymentTime: new Date()
+                        };
+                        await booking.save();
+
+                        // Occupy seats on the show
+                        const show = await Show.findById(booking.show);
+                        if (show) {
+                            const occupied = { ...(show.occupiedSeats || {}) };
+                            for (const seat of booking.bookedSeats) occupied[seat] = true;
+                            show.occupiedSeats = occupied;
+                            await show.save();
+                        }
+                    }
+
                     return res.json({
                         success: true,
-                        message: "Payment already verified and booking created",
-                        booking: existingBooking
+                        message: "Payment verified and booking updated",
+                        booking
                     });
                 }
 
-                // If no booking exists but payment is successful, we need to recover from session or localStorage
-                return res.json({
-                    success: true,
-                    message: "Payment verified successfully, but booking not found. Please contact support with order ID: " + orderId,
-                    paymentStatus: paymentVerification.data.order_status,
-                    orderId: orderId
-                });
+                // Fallback: check by paymentDetails.orderId if already updated by webhook
+                const existingBooking = await Booking.findOne({ 'paymentDetails.orderId': orderId });
+                if (existingBooking) {
+                    return res.json({ success: true, message: 'Payment already verified', booking: existingBooking });
+                }
+
+                return res.status(404).json({ success: false, message: 'Booking not found for verified order' });
             } else {
                 // Payment not successful
                 return res.json({
