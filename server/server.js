@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import connectDB from './configs/db.js';
+import mongoose from 'mongoose';
 
 // Set default NODE_ENV if not defined
 // process.env.NODE_ENV = process.env.NODE_ENV || 'development'; // Commented out to use value from .env
@@ -16,25 +17,6 @@ import testRouter from './routes/testRoutes.js';
 
 const app = express();
 const port = 3000;
-
-// Connect to database with error handling
-let dbConnected = false;
-
-// Attempt to connect to the database
-const initializeDatabase = async () => {
-  try {
-    await connectDB();
-    dbConnected = true;
-    console.log('Database initialization successful');
-  } catch (error) {
-    console.error('Failed to initialize database:', error.message);
-    dbConnected = false;
-    // Don't exit the process, let the app continue with degraded functionality
-  }
-};
-
-// Initialize database connection
-initializeDatabase();
 
 // Middleware
 app.use(express.json())
@@ -58,7 +40,7 @@ const corsOptions = {
     // In production, only allow specific origins
     // In development, allow localhost with any port
     const isProduction = process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true';
-    
+
     if (isProduction) {
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
@@ -91,8 +73,34 @@ app.use('/api/admin', adminRouter)
 app.use('/api/user', userRouter)
 app.use('/api/test', testRouter)
 
-app.listen(port, () => {
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`Server listening at http://localhost:${port}`);
-  }
+// Lightweight health check endpoint
+app.get('/api/health', async (req, res) => {
+  const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  const state = states[mongoose.connection.readyState] || mongoose.connection.readyState;
+  res.json({
+    success: true,
+    environment: process.env.NODE_ENV,
+    db: {
+      state,
+      host: mongoose.connection.host,
+      name: mongoose.connection.name
+    }
+  });
 });
+
+// Start server only after DB connection is established to prevent Mongoose buffering timeouts
+const startServer = async () => {
+  try {
+    await connectDB();
+    app.listen(port, () => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`Server listening at http://localhost:${port}`);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to connect to database. Server not started:', error.message);
+    process.exit(1);
+  }
+};
+
+startServer();
