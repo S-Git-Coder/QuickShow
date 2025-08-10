@@ -24,17 +24,22 @@ const getBaseUrls = () => {
         process.env.VERCEL_ENV === 'production' ||
         process.env.CASHFREE_USE_PRODUCTION === 'true';
 
+    let clientUrl, serverUrl;
+    
     if (isProduction) {
-        return {
-            clientUrl: process.env.CLIENT_URL || 'https://quick-show.vercel.app',
-            serverUrl: process.env.SERVER_URL || 'https://quickshow-server-sahil-patels-projects-4fd5f591.vercel.app'
-        };
+        clientUrl = process.env.CLIENT_URL || 'https://quickshow-pied.vercel.app';
+        serverUrl = process.env.SERVER_URL || 'https://quickshow-server-alpha-three.vercel.app';
     } else {
-        return {
-            clientUrl: process.env.CLIENT_URL || process.env.VITE_CLIENT_URL || 'http://localhost:5174',
-            serverUrl: process.env.SERVER_URL || 'http://localhost:3000'
-        };
+        clientUrl = process.env.CLIENT_URL || process.env.VITE_CLIENT_URL || 'http://localhost:5174';
+        serverUrl = process.env.SERVER_URL || 'http://localhost:3000';
     }
+    
+    // Log the URLs being used
+    console.log('URL Configuration:');
+    console.log('- Client URL:', clientUrl);
+    console.log('- Server URL:', serverUrl);
+    
+    return { clientUrl, serverUrl };
 };
 
 /**

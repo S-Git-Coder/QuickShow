@@ -8,6 +8,12 @@ dotenv.config();
 // Force production mode for live payments
 const isProduction = process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true';
 
+// Log environment and configuration status
+console.log('Cashfree Configuration:');
+console.log('- Environment:', process.env.NODE_ENV);
+console.log('- Force Production:', process.env.CASHFREE_USE_PRODUCTION);
+console.log('- Using Production Config:', isProduction);
+
 // Sandbox credentials (for development)
 const sandboxConfig = {
     appId: process.env.CASHFREE_SANDBOX_APP_ID || process.env.CASHFREE_APP_ID,

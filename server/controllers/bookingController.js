@@ -110,15 +110,17 @@ export const createBooking = async (req, res) => {
 
             // For API version 2023-08-01, we need to construct the payment URL using payment_session_id
             if (cashfreeRes.data.payment_session_id) {
-                // Always use production URL for payments
-                // const isProduction = process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true';
-                // const isLocalDevelopment = returnUrl.includes('localhost') || notifyUrl.includes('localhost');
-                // const basePaymentUrl = (isProduction && !isLocalDevelopment)
-                //     ? 'https://payments.cashfree.com/pay/'
-                //     : 'https://sandbox.cashfree.com/pay/';
+                // Determine the correct payment URL based on environment
+                const isProduction = process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true';
+                const isLocalDevelopment = returnUrl.includes('localhost') || notifyUrl.includes('localhost');
                 
-                // Always use production URL for payments
-                const basePaymentUrl = 'https://payments.cashfree.com/pay/';
+                // Use the appropriate payment URL
+                const basePaymentUrl = isProduction
+                    ? 'https://payments.cashfree.com/pay/'
+                    : 'https://sandbox.cashfree.com/pay/';
+                
+                console.log('Using payment URL:', basePaymentUrl);
+                console.log('Payment session ID:', cashfreeRes.data.payment_session_id);
                 paymentLink = `${basePaymentUrl}${cashfreeRes.data.payment_session_id}`;
                 
                 // Store the payment session ID in the session for verification later
@@ -138,10 +140,26 @@ export const createBooking = async (req, res) => {
             console.error('Cashfree API error status:', error.response ? error.response.status : 'No status');
             console.error('Cashfree API error data:', error.response ? JSON.stringify(error.response.data) : 'No response data');
             
+            // Check for specific error types to provide better error messages
+            let errorMessage = "Payment gateway error. Please try again later.";
+            
+            if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+                errorMessage = "Unable to connect to payment gateway. Please check your internet connection and try again.";
+            } else if (error.response) {
+                // Handle specific HTTP error codes
+                if (error.response.status === 401) {
+                    errorMessage = "Payment authentication failed. Please contact support.";
+                    console.error('CRITICAL: Cashfree API authentication failed. Check API credentials.');
+                } else if (error.response.status === 400) {
+                    errorMessage = "Invalid payment request. Please try again with correct information.";
+                }
+            }
+            
             return res.json({
                 success: false,
-                message: "Payment gateway error. Please try again later.",
-                error: error.message
+                message: errorMessage,
+                error: error.message,
+                details: error.response ? error.response.data : null
             });
         }
 
