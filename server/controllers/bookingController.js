@@ -94,7 +94,21 @@ export const createBooking = async (req, res) => {
 
         let paymentLink;
         try {
-            // Log the exact headers being sent
+            // Log the exact headers being sent (without exposing the full secret key)
+            console.log('Cashfree API Request:');
+            console.log('- App ID:', cashfreeConfig.appId);
+            console.log('- Secret Key Length:', cashfreeConfig.secretKey ? cashfreeConfig.secretKey.length : 'Not set');
+            console.log('- API Version: 2023-08-01');
+            console.log('- Base URL:', cashfreeConfig.baseUrl);
+            
+            // Prepare headers for Cashfree API - always use production credentials
+            // Log the credentials being used (masked for security)
+            console.log('Using Cashfree credentials:');
+            console.log('- App ID:', cashfreeConfig.appId ? `${cashfreeConfig.appId.substring(0, 6)}...${cashfreeConfig.appId.substring(cashfreeConfig.appId.length - 4)}` : 'Not set');
+            console.log('- Secret Key Length:', cashfreeConfig.secretKey ? cashfreeConfig.secretKey.length : 'Not set');
+            console.log('- API Version:', '2023-08-01');
+            console.log('- Base URL:', cashfreeConfig.baseUrl);
+            
             const headers = {
                 "x-client-id": cashfreeConfig.appId,
                 "x-client-secret": cashfreeConfig.secretKey,
@@ -110,14 +124,17 @@ export const createBooking = async (req, res) => {
 
             // For API version 2023-08-01, we need to construct the payment URL using payment_session_id
             if (cashfreeRes.data.payment_session_id) {
-                // Determine the correct payment URL based on environment
+                // Always use the production payment URL when in production mode
+                // This is critical for authentication to work correctly
                 const isProduction = process.env.NODE_ENV === 'production' || process.env.CASHFREE_USE_PRODUCTION === 'true';
-                const isLocalDevelopment = returnUrl.includes('localhost') || notifyUrl.includes('localhost');
                 
-                // Use the appropriate payment URL
-                const basePaymentUrl = isProduction
-                    ? 'https://payments.cashfree.com/pay/'
-                    : 'https://sandbox.cashfree.com/pay/';
+                // Use the appropriate payment URL - always use production URL with production credentials
+                // This ensures we're using the correct endpoint that matches our credentials
+                const basePaymentUrl = 'https://payments.cashfree.com/pay/';
+                
+                console.log('Environment check:');
+                console.log('- Is Production:', isProduction);
+                console.log('- Using Payment URL:', basePaymentUrl);
                 
                 console.log('Using payment URL:', basePaymentUrl);
                 console.log('Payment session ID:', cashfreeRes.data.payment_session_id);
@@ -145,13 +162,26 @@ export const createBooking = async (req, res) => {
             
             if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
                 errorMessage = "Unable to connect to payment gateway. Please check your internet connection and try again.";
+                console.error('NETWORK ERROR: Unable to connect to Cashfree API');
             } else if (error.response) {
                 // Handle specific HTTP error codes
                 if (error.response.status === 401) {
                     errorMessage = "Payment authentication failed. Please contact support.";
                     console.error('CRITICAL: Cashfree API authentication failed. Check API credentials.');
+                    console.error('Auth Error Details:', JSON.stringify(error.response.data));
+                    
+                    // Log the exact credentials being used (partially masked)
+                    const appIdMasked = cashfreeConfig.appId ? 
+                        `${cashfreeConfig.appId.substring(0, 6)}...${cashfreeConfig.appId.substring(cashfreeConfig.appId.length - 4)}` : 'Not set';
+                    console.error('Credentials used for failed request:');
+                    console.error('- App ID:', appIdMasked);
+                    console.error('- Secret Key Length:', cashfreeConfig.secretKey ? cashfreeConfig.secretKey.length : 'Not set');
+                    console.error('- Base URL:', cashfreeConfig.baseUrl);
                 } else if (error.response.status === 400) {
                     errorMessage = "Invalid payment request. Please try again with correct information.";
+                    console.error('BAD REQUEST: Cashfree API rejected the request', JSON.stringify(error.response.data));
+                } else {
+                    console.error(`HTTP ERROR ${error.response.status}: Cashfree API request failed`, JSON.stringify(error.response.data));
                 }
             }
             
