@@ -36,7 +36,7 @@ const corsOptions = {
       // 'http://localhost:5174',
       // 'http://localhost:3000',
       // Production origin
-      'https://quick-show.vercel.app'
+      'https://quickshow-pied.vercel.app'
     ];
 
     // In production, only allow specific origins
@@ -56,7 +56,9 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions))
