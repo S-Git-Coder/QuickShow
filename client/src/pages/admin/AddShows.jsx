@@ -60,21 +60,22 @@ const AddShows = () => {
   };
 
   const handleSubmit = async () => {
+    // Client-side validation first; don't set loading if invalid
+    if (!selectedMovie || Object.keys(dateTimeSelection).length === 0 || !showPrice) {
+      toast.error('Missing required fields');
+      return;
+    }
+
+    const showsInput = Object.entries(dateTimeSelection).map(([date, time]) => ({ date, time }));
+
+    const payload = {
+      movieId: selectedMovie,
+      showsInput,
+      showPrice: Number(showPrice)
+    }
+
+    setAddingShow(true)
     try {
-      setAddingShow(true)
-
-      if (!selectedMovie || Object.keys(dateTimeSelection).length === 0 || !showPrice) {
-        return toast('Missing required fields');
-      }
-
-      const showsInput = Object.entries(dateTimeSelection).map(([date, time]) => ({ date, time }));
-
-      const payload = {
-        movieId: selectedMovie,
-        showsInput,
-        showPrice: Number(showPrice)
-      }
-
       const { data } = await axios.post('/api/show/add', payload, {
         headers: { Authorization: `Bearer ${await getToken()}` }
       })
@@ -84,14 +85,15 @@ const AddShows = () => {
         setSelectedMovie(null)
         setDateTimeSelection({})
         setShowPrice("")
-      }else{
+      } else {
         toast.error(data.message)
       }
     } catch (error) {
-      console.error("Submission error:",error);
+      console.error("Submission error:", error);
       toast.error('An error occurred. Please try again.')
+    } finally {
+      setAddingShow(false)
     }
-    setAddingShow(false)
   }
 
   useEffect(() => {

@@ -58,14 +58,25 @@ export const addShow = async (req, res) => {
             movie = await Movie.create(movieDetails);
         }
 
+        // Helper: interpret provided date & time as Asia/Kolkata local time, then store as UTC Date
+        const toUTCFromIST = (dateStr, timeStr) => {
+            // Build a UTC date from IST components by subtracting +05:30 offset (330 minutes)
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const [hh, mm] = timeStr.split(':').map(Number);
+            const utc = new Date(Date.UTC(y, m - 1, d, hh, mm));
+            // IST = UTC + 5:30, so to get UTC instant for the local IST time, subtract 330 minutes
+            utc.setUTCMinutes(utc.getUTCMinutes() - 330);
+            return utc;
+        };
+
         const showsToCreate = [];
         showsInput.forEach(show => {
             const showDate = show.date;
             show.time.forEach((time) => {
-                const dateTimeString = `${showDate}T${time}`;
+                const when = toUTCFromIST(showDate, time);
                 showsToCreate.push({
                     movie: movieId,
-                    showDateTime: new Date(dateTimeString),
+                    showDateTime: when,
                     showPrice,
                     occupiedSeats: {}
                 })
@@ -79,7 +90,7 @@ export const addShow = async (req, res) => {
         // Trigger Inngest event
         await inngest.send({
             name: "app/show.added",
-            data: {movieTitle: movie.title}
+            data: { movieTitle: movie.title }
         })
 
         res.json({ success: true, message: "Show added successfully." });
