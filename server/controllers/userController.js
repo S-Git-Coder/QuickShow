@@ -97,30 +97,14 @@ export const getUserBookings = async (req, res) => {
             return res.status(401).json({ success: false, message: 'Authentication error: No user ID' });
         }
 
-        console.log('Fetching bookings for user:', userId);
         const bookings = await Booking.find({ user: userId }).populate({
             path: "show",
             populate: { path: "movie" }
         }).sort({ createdAt: -1 });
 
-        console.log('Bookings found:', bookings.length);
-
-        // Debug each booking
-        bookings.forEach((booking, index) => {
-            console.log(`Booking ${index + 1}:`, {
-                id: booking._id,
-                isPaid: booking.isPaid,
-                paymentStatus: booking.paymentStatus,
-                paymentLink: booking.paymentLink ? 'Present' : 'Missing',
-                show: booking.show ? booking.show._id : 'Missing',
-                movie: booking.show && booking.show.movie ? booking.show.movie.title : 'Missing'
-            });
-        });
-
         // Ensure paymentLink is included in the response and regenerate missing links
         const bookingsWithPaymentLinks = await Promise.all(bookings.map(async booking => {
             const bookingObj = booking.toObject();
-            console.log(`Processing booking ${booking._id}, paymentLink:`, booking.paymentLink ? 'Present' : 'Missing');
 
             // If payment link is missing and payment is not already completed, try to regenerate it
             if (!booking.paymentLink && booking.paymentStatus === 'pending' && !booking.isPaid) {

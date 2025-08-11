@@ -95,57 +95,68 @@ const sendShowReminders = inngest.createFunction(
         const in8Hours = new Date(now.getTime() + 8 * 60 * 60 * 1000);
         const windowStart = new Date(in8Hours.getTime() - 10 * 60 * 1000);
 
-        // Prepare reminder tasks
+        // Prepare reminder tasks from paid bookings tied to shows starting in ~8 hours
         const reminderTasks = await step.run("prepare-reminder-tasks", async () => {
+            // Find shows starting within the window
             const shows = await Show.find({
-                showTime: { $gte: windowStart, $lte: in8Hours },
+                showDateTime: { $gte: windowStart, $lte: in8Hours },
             }).populate('movie');
 
+            if (!shows.length) return [];
+
+            // Find paid bookings for these shows which haven't received a reminder yet
+            const showIds = shows.map(s => s._id.toString());
+            const bookings = await Booking.find({
+                show: { $in: showIds },
+                isPaid: true,
+                reminderSent: { $ne: true }
+            }).populate('user');
+
             const tasks = [];
+            const showMap = new Map(shows.map(s => [s._id.toString(), s]));
 
-            for (const show of shows) {
-                if (!show.movie || !show.occupiedSeats) continue;
-
-                const userIds = [...new Set(Object.values(show.occupiedSeats))];
-                if (userIds.length === 0) continue;
-
-                const users = await User.find({ _id: { $in: userIds } }).select("name email");
-
-                for (const user of users) {
-                    tasks.push({
-                        userEmail: user.email,
-                        userName: user.name,
-                        movieTitle: show.movie.title,
-                        showTime: show.showTime,
-                    })
-                }
+            for (const b of bookings) {
+                const show = showMap.get(b.show);
+                if (!show || !b.user) continue;
+                tasks.push({
+                    bookingId: b._id.toString(),
+                    userEmail: b.user.email,
+                    userName: b.user.name,
+                    movieTitle: show.movie?.title || 'your movie',
+                    showTime: show.showDateTime,
+                });
             }
             return tasks;
-        })
+        });
         if (reminderTasks.length === 0) {
             return { sent: 0, message: "No reminders to send." }
         }
 
-        // Send reminders emails
+        // Send reminder emails and mark reminderSent
         const results = await step.run('send-all-reminders', async () => {
             return await Promise.allSettled(
-                reminderTasks.map(task => sendEmail({
-                    to: task.userEmail,
-                    subject: `Reminder: Your movie "${task.movieTitle}" starts soon!`,
-                    body: `<div style="font-family: Arial, sans-serif; padding: 20px;">
-                        <h2>Hello ${task.userName},</h2>
-                        <p>This is a quick reminder that your movie:</p>
-                        <h3 style="color: #F84565;">"${task.movieTitle}"</h3>
-                        <p>
-                            is scheduled for <strong>${new Date(task.showTime).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}</strong> at <strong>${new Date(task.showTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })}</strong>.
-                        </p>
-                        <p>It starts in approximately <strong>8 hours</strong> - make sure you're ready!</p>
-                        <br/>
-                        <p>Enjoy the show!<br/>QuickShow Team</p>
-                    </div>`
-                }))
+                reminderTasks.map(async task => {
+                    await sendEmail({
+                        to: task.userEmail,
+                        subject: `Reminder: Your movie "${task.movieTitle}" starts soon!`,
+                        body: `<div style="font-family: Arial, sans-serif; padding: 20px;">
+                            <h2>Hello ${task.userName},</h2>
+                            <p>This is a quick reminder that your movie:</p>
+                            <h3 style="color: #F84565;">"${task.movieTitle}"</h3>
+                            <p>
+                                is scheduled for <strong>${new Date(task.showTime).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}</strong> at <strong>${new Date(task.showTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })}</strong>.
+                            </p>
+                            <p>It starts in approximately <strong>8 hours</strong> - make sure you're ready!</p>
+                            <br/>
+                            <p>Enjoy the show!<br/>QuickShow Team</p>
+                        </div>`
+                    });
+                    // Mark reminder sent
+                    await Booking.findByIdAndUpdate(task.bookingId, { reminderSent: true });
+                })
             )
-        })
+        });
+
         const sent = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.length - sent;
 

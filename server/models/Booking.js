@@ -8,6 +8,8 @@ const bookingSchema = new mongoose.Schema({
     isPaid: { type: Boolean, default: false },
     // Prevent duplicate email notifications
     confirmationEmailSent: { type: Boolean, default: false },
+    // Prevent duplicate reminder emails
+    reminderSent: { type: Boolean, default: false },
     paymentLink: { type: String },
     paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
     paymentDetails: {
