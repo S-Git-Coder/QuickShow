@@ -7,6 +7,7 @@ import axios from "axios";
 import mongoose from "mongoose";
 import cashfreeConfig from "../configs/cashfree.js";
 import { buildReturnUrl, buildNotifyUrl, getEnvironmentInfo } from "../utils/urlBuilder.js";
+import { inngest } from "../inngest/index.js";
 
 // Function to check availability of selected seats for a movie
 const checkSeatsAvailability = async (showId, selectedSeats) => {
@@ -55,15 +56,6 @@ export const createBooking = async (req, res) => {
         const returnUrl = buildReturnUrl(`order_${tempBookingId}`);
         const notifyUrl = buildNotifyUrl();
         const envInfo = getEnvironmentInfo();
-
-        // Log URL configuration for debugging
-        console.log('🌐 URL Configuration:', {
-            environment: envInfo.environment,
-            isProduction: envInfo.isProduction,
-            protocol: envInfo.protocol,
-            returnUrl,
-            notifyUrl
-        });
 
         // Create a pending booking right away so it's visible in MyBookings
         const pendingBookingDoc = await Booking.create({
@@ -428,6 +420,18 @@ export const handlePaymentCallback = async (req, res) => {
                 await showToUpdate.save();
             }
 
+            // Emit booking success event (only if email not already sent)
+            try {
+                if (!booking.confirmationEmailSent) {
+                    await inngest.send({
+                        name: 'app/show.booked',
+                        data: { bookingId: booking._id.toString() }
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to emit app/show.booked event:', e.message);
+            }
+
             // Clear the pending booking from session
             delete req.session.pendingBooking;
 
@@ -537,6 +541,18 @@ export const handlePaymentWebhook = async (req, res) => {
                 show.occupiedSeats = occupied;
                 await show.save();
             }
+
+            // Emit booking success event (guard for duplicates)
+            try {
+                if (!booking.confirmationEmailSent) {
+                    await inngest.send({
+                        name: 'app/show.booked',
+                        data: { bookingId: booking._id.toString() }
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to emit app/show.booked event (webhook):', e.message);
+            }
         }
 
         try {
@@ -617,6 +633,18 @@ export const verifyPayment = async (req, res) => {
                             for (const seat of booking.bookedSeats) occupied[seat] = true;
                             show.occupiedSeats = occupied;
                             await show.save();
+                        }
+
+                        // Emit booking success event (manual verify path)
+                        try {
+                            if (!booking.confirmationEmailSent) {
+                                await inngest.send({
+                                    name: 'app/show.booked',
+                                    data: { bookingId: booking._id.toString() }
+                                });
+                            }
+                        } catch (e) {
+                            console.error('Failed to emit app/show.booked event (manual verify):', e.message);
                         }
                     }
 

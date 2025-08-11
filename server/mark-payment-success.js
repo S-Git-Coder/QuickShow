@@ -5,13 +5,10 @@ import 'dotenv/config';
 const markPaymentSuccess = async (orderId) => {
     if (!orderId) {
         console.error('Please provide an orderId');
-        console.log('Usage: node mark-payment-success.js <orderId>');
         process.exit(1);
     }
 
     try {
-        console.log('🔄 Marking payment as successful for orderId:', orderId);
-
         // Simulate successful payment webhook
         const webhookData = {
             orderId: orderId,
@@ -33,11 +30,8 @@ const markPaymentSuccess = async (orderId) => {
             }
         });
 
-        console.log('✅ Payment marked as successful:', response.data);
-
         // Also test the verification endpoint
         const verifyResponse = await axios.get(`${serverUrl}/api/booking/verify/${orderId}`);
-        console.log('✅ Verification result:', verifyResponse.data);
 
     } catch (error) {
         console.error('❌ Error marking payment as successful:', error.response?.data || error.message);

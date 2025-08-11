@@ -13,8 +13,6 @@ const MyBookings = () => {
     // EMERGENCY FIX - Immediate redirect on any orderId
     useEffect(() => {
         if (orderId) {
-            console.log('🚨 EMERGENCY: Payment redirect detected, forcing success');
-
             // Show success immediately
             toast.success('Payment successful! Your booking has been confirmed.');
 

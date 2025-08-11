@@ -98,15 +98,10 @@ const SeatLayout = () => {
       // Show loading toast
       const loadingToast = toast.loading("Generating payment link...");
 
-      // Log the request being made
-      console.log('Sending booking request:', { showId: selectedTime.showId, selectedSeats });
-
       const { data } = await axios.post('/api/booking/create', { showId: selectedTime.showId, selectedSeats }, { headers: { Authorization: `Bearer ${await getToken()}` } });
 
       // Dismiss loading toast
       toast.dismiss(loadingToast);
-
-      console.log('Booking response:', data);
 
       if (data.success && (data.paymentSessionId || data.paymentLink)) {
         // Store tempBookingId in localStorage for potential recovery
@@ -122,7 +117,6 @@ const SeatLayout = () => {
           try {
             const Cashfree = await loadCashfreeSdk();
             const cashfree = Cashfree({ mode: 'production' });
-            console.log('Opening Cashfree checkout with session:', data.paymentSessionId);
             await cashfree.checkout({ paymentSessionId: data.paymentSessionId, redirectTarget: '_self' });
             return; // control will go to redirect URL after payment
           } catch (sdkErr) {
@@ -132,7 +126,6 @@ const SeatLayout = () => {
 
         // Fallback: direct redirect to hosted checkout URL
         if (data.paymentLink && data.paymentLink.startsWith('https://payments.cashfree.com/session/')) {
-          console.log('Redirecting to payment page (fallback):', data.paymentLink);
           window.location.href = data.paymentLink;
           return;
         }

@@ -115,7 +115,6 @@ export const AppProvider = ({ children }) => {
                     // If we have a pending order ID and we're coming from a payment redirect,
                     // redirect to my-bookings with the order ID
                     if (pendingOrderId && paymentRedirect === 'true') {
-                        console.log('Redirecting to my-bookings with pendingOrderId:', pendingOrderId);
                         // Clear the payment redirect flag but keep the order ID
                         sessionStorage.removeItem('paymentRedirect');
                         // Redirect to my-bookings with the order ID
@@ -126,7 +125,7 @@ export const AppProvider = ({ children }) => {
                     console.error('Error syncing user:', error);
                     // Even if the database sync fails, we can still use client-side user data
                     // and allow the user to continue using the app with limited functionality
-                    console.log('Continuing with client-side user data due to sync failure');
+
 
                     // Still handle pending orders even if sync failed
                     if (pendingOrderId && paymentRedirect === 'true') {

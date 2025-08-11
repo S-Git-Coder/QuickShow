@@ -56,6 +56,11 @@ const sendBookingConfirmationEmail = inngest.createFunction(
             populate: { path: "movie", model: "Movie" }
         }).populate('user');
 
+        if (!booking) return { message: 'Booking not found', bookingId };
+        if (booking.confirmationEmailSent) return { message: 'Email already sent', bookingId };
+
+        const showDate = new Date(booking.show.showDateTime);
+
         await sendEmail({
             to: booking.user.email,
             subject: `Payment Confirmation: "${booking.show.movie.title}" booked!`,
@@ -63,14 +68,21 @@ const sendBookingConfirmationEmail = inngest.createFunction(
                 <h2>Hi ${booking.user.name},</h2>
                 <p>Your booking for <strong style="color: #F84565;">"${booking.show.movie.title}"</strong> is confirmed.</p>
                 <p>
-                    <strong>Date:</strong> ${new Date(booking.show.dateFormat).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}<br />
-
-                    <strong>Time:</strong> ${new Date(booking.show.dateFormat).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })}
+                    <strong>Date:</strong> ${showDate.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}<br />
+                    <strong>Time:</strong> ${showDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })}
                 </p>
                 <p>Enjoy the show! 🍿</p>
                 <p>Thanks for booking with us!<br />- QuickShow Team</p>
             </div>`
         })
+
+        // Mark as sent to avoid duplicates
+        try {
+            booking.confirmationEmailSent = true;
+            await booking.save();
+        } catch (e) {
+            console.error('Failed to mark confirmationEmailSent:', e.message);
+        }
     }
 )
 

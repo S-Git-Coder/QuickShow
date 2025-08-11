@@ -34,11 +34,6 @@ const getBaseUrls = () => {
         serverUrl = process.env.SERVER_URL || 'http://localhost:3000';
     }
 
-    // Log the URLs being used
-    console.log('URL Configuration:');
-    console.log('- Client URL:', clientUrl);
-    console.log('- Server URL:', serverUrl);
-
     return { clientUrl, serverUrl };
 };
 

@@ -82,11 +82,7 @@ export const syncUser = async (req, res) => {
 
 // API Controller Function to Get User Bookings
 export const getUserBookings = async (req, res) => {
-    console.log('getUserBookings API called');
     try {
-        console.log('Request headers:', req.headers);
-        console.log('Auth object available:', !!req.auth);
-
         // Check if auth function exists and can be called
         if (!req.auth || typeof req.auth !== 'function') {
             console.error('Auth function not available or not a function');
@@ -95,7 +91,6 @@ export const getUserBookings = async (req, res) => {
 
         // Get user ID from auth
         const userId = req.auth().userId;
-        console.log('Authenticated user ID:', userId);
 
         if (!userId) {
             console.error('No user ID found in auth object');
@@ -130,8 +125,6 @@ export const getUserBookings = async (req, res) => {
             // If payment link is missing and payment is not already completed, try to regenerate it
             if (!booking.paymentLink && booking.paymentStatus === 'pending' && !booking.isPaid) {
                 try {
-                    console.log(`Attempting to regenerate payment link for booking ${booking._id}`);
-
                     // Import necessary modules for Cashfree integration
                     const cashfreeConfig = (await import('../configs/cashfree.js')).default;
                     const { buildReturnUrl, buildNotifyUrl } = await import('../utils/urlBuilder.js');
@@ -188,7 +181,6 @@ export const getUserBookings = async (req, res) => {
                         booking.paymentLink = paymentLink;
                         await booking.save();
 
-                        console.log(`Successfully regenerated payment link for booking ${booking._id}`);
                         bookingObj.paymentLink = paymentLink;
                     }
                 } catch (error) {
@@ -203,7 +195,6 @@ export const getUserBookings = async (req, res) => {
             };
         }));
 
-        console.log('Sending response with bookings');
         res.json({ success: true, bookings: bookingsWithPaymentLinks });
     } catch (error) {
         console.error('Error in getUserBookings:', error.message);
