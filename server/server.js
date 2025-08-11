@@ -16,7 +16,10 @@ import userRouter from './routes/userRoutes.js';
 
 
 const app = express();
-const port = 3000;
+// Respect platform-provided port in local/server environments
+const port = process.env.PORT || 3000;
+// Behind Vercel/Proxies, trust the first proxy so protocol/IP are correct
+app.set('trust proxy', 1);
 
 // Middleware
 // Capture raw body for specific webhook route for signature verification
@@ -120,4 +123,13 @@ const startServer = async () => {
   }
 };
 
-startServer();
+// Vercel serverless: export the app and do not call app.listen().
+// Locally or in traditional servers, start the HTTP listener.
+if (process.env.VERCEL) {
+  // Ensure DB connection is initialized in serverless context
+  connectDB().catch(err => console.error('DB init error:', err.message));
+} else {
+  startServer();
+}
+
+export default app;
