@@ -100,9 +100,7 @@ See DEPLOYMENT_FIX_GUIDE.md for detailed steps.
   # Deploy to Vercel or your hosting platform
 
 - Deploy backend:  
-
   cd server
-  # Deploy to Vercel or your hosting platform
 
 ## Emergency Fixes
 
