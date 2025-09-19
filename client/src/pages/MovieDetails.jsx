@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { dummyDateTimeData, dummyShowsData } from '../assets/assets'
 import BlurCircle from '../components/BlurCircle'
-import { Heart, PlayCircleIcon, StarIcon } from 'lucide-react'
+import { Heart, PlayCircleIcon, StarIcon, X } from 'lucide-react'
 import timeFormat from '../lib/timeFormat'
 import DateSelect from '../components/DateSelect'
 import MovieCard from '../components/MovieCard'
@@ -10,12 +10,14 @@ import { useNavigate } from 'react-router-dom'
 import Loading from '../components/Loading'
 import { useAppContext } from '../context/AppContext'
 import toast from 'react-hot-toast'
+import ReactPlayer from 'react-player'
 
 const MovieDetails = () => {
 
   const navigate = useNavigate()
   const { id } = useParams()
   const [show, setShow] = useState(null)
+  const [showTrailer, setShowTrailer] = useState(false)
 
   const { shows, axios, getToken, user, fetchFavoriteMovies, favoriteMovies, image_base_url } = useAppContext()
 
@@ -23,6 +25,11 @@ const MovieDetails = () => {
     try {
       const { data } = await axios.get(`/api/show/${id}`)
       if (data.success) {
+        console.log('Show data received:', data)
+        // Check both possible locations for trailer URL
+        console.log('Show level trailer URL:', data.trailerUrl)
+        console.log('Movie level trailer URL:', data.movie?.trailerUrl)
+        console.log('Movie object:', data.movie)
         setShow(data)
       }
     } catch (error) {
@@ -72,10 +79,46 @@ const MovieDetails = () => {
           </p>
 
           <div className='flex items-center flex-wrap gap-4 mt-4'>
-            <button className='flex items-center gap-2 px-7 py-3 text-sm bg-gray-800 hover:bg-gray-900 transition rounded-md font-medium cursor-pointer active:scale-95'>
-              <PlayCircleIcon className='w-5 h-5' />
-              Watch Trailer
-            </button>
+            {show.movie.trailerUrl ? (
+              <button 
+                onClick={() => setShowTrailer(true)} 
+                className='flex items-center gap-2 px-7 py-3 text-sm bg-gray-800 hover:bg-gray-900 transition rounded-md font-medium cursor-pointer active:scale-95'
+              >
+                <PlayCircleIcon className='w-5 h-5' />
+                Watch Trailer
+              </button>
+            ) : (
+              <button disabled className='flex items-center gap-2 px-7 py-3 text-sm bg-gray-800/50 cursor-not-allowed transition rounded-md font-medium'>
+                <PlayCircleIcon className='w-5 h-5' />
+                No Trailer Available
+              </button>
+            )}
+            
+            {/* Trailer Modal */}
+            {showTrailer && show.movie.trailerUrl && (
+              <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div className="relative w-full max-w-4xl aspect-video bg-black rounded-lg overflow-hidden">
+                  <button 
+                    onClick={() => setShowTrailer(false)}
+                    className="absolute top-2 right-2 z-10 bg-black/50 p-2 rounded-full text-white hover:bg-black/80 transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
+                  <ReactPlayer
+                    url={show.movie.trailerUrl}
+                    controls
+                    playing
+                    width="100%"
+                    height="100%"
+                    onError={(e) => {
+                      console.error('[MovieDetails] Trailer error:', e);
+                      toast.error("Failed to load trailer. Please try again later.");
+                      setShowTrailer(false);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
             <a href="#dateSelect" className='px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-md font-medium cursor-pointer active:scale-95'>Buy Tickets</a>
             <button onClick={handleFavorite} className='bg-gray-700 p-2.5 rounded-full transition cursor-pointer active:scale-95'>
               <Heart className={`w-5 h-5 ${favoriteMovies.find(movie => movie._id === id) ? 'fill-primary text-primary' : ""} `} />

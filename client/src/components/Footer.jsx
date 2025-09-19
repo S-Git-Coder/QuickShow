@@ -3,39 +3,39 @@ import { assets } from '../assets/assets'
 
 const Footer = () => {
   return (
-    <footer className="px-6 md:px-16 lg:px-36 mt-40 w-full text-gray-300">
+    <footer role="contentinfo" className="px-6 md:px-16 lg:px-36 mt-40 w-full text-gray-300">
       <div className="flex flex-col md:flex-row justify-between w-full gap-10 border-b border-gray-500 pb-14">
-        <div className="md:max-w-96">
-          <img className="w-36 h-auto" src={assets.logo} alt="logo" />
+        <div className="md:max-w-[24rem]">
+          <img className="w-36 h-auto" src={assets.logo} alt="QuickShow logo" />
           <p className="mt-6 text-sm">
-            Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book.
+            QuickShow is a seamless movie booking platform offering the latest shows, real-time seat availability, and secure payments for a smooth experience.
           </p>
           <div className="flex items-center gap-2 mt-4">
-            <img src={assets.googlePlay} alt="google play" className="h-9 w-auto" />
-            <img src={assets.appStore} alt="app store" className="h-9 w-auto" />
+            <img src={assets.googlePlay} alt="google play" className="h-9 w-auto" loading="lazy" />
+            <img src={assets.appStore} alt="app store" className="h-9 w-auto" loading="lazy" />
           </div>
         </div>
         <div className="flex-1 flex items-start md:justify-end gap-20 md:gap-40">
-          <div>
+          <nav aria-label="Footer navigation">
             <h2 className="font-semibold mb-5">Company</h2>
             <ul className="text-sm space-y-2">
-              <li><a href="#">Home</a></li>
-              <li><a href="#">About us</a></li>
-              <li><a href="#">Contact us</a></li>
-              <li><a href="#">Privacy policy</a></li>
+              <li><a href="#" className="hover:text-white/90 transition-colors">Home</a></li>
+              <li><a href="#" className="hover:text-white/90 transition-colors">About us</a></li>
+              <li><a href="#" className="hover:text-white/90 transition-colors">Contact us</a></li>
+              <li><a href="#" className="hover:text-white/90 transition-colors">Privacy policy</a></li>
             </ul>
-          </div>
+          </nav>
           <div>
             <h2 className="font-semibold mb-5">Get in touch</h2>
-            <div className="text-sm space-y-2">
-              <p>+1-234-567-890</p>
-              <p>contact@example.com</p>
-            </div>
+            <address className="not-italic text-sm space-y-2">
+              <a href="tel:+1234567890" className="block hover:text-white/90 transition-colors">+1-234-567-890</a>
+              <a href="mailto:contact@example.com" className="block hover:text-white/90 transition-colors">contact@example.com</a>
+            </address>
           </div>
         </div>
       </div>
       <p className="pt-4 text-center text-sm pb-5">
-        Copyright {new Date().getFullYear()} © QuickShow. All Right Reserved.
+        Copyright {new Date().getFullYear()} © QuickShow. All Rights Reserved.
       </p>
     </footer>
   )

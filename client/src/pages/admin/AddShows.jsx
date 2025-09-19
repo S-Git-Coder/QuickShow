@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 
 const AddShows = () => {
 
-  const { axios, getToken, user, image_base_url } = useAppContext()
+  const { axios, getToken, user, image_base_url, fetchShows } = useAppContext()
 
   const currency = import.meta.env.VITE_CURRENCY
   const [nowPlayingMovies, setNowPlayingMovies] = useState([]);
@@ -17,6 +17,7 @@ const AddShows = () => {
   const [dateTimeInput, setDateTimeInput] = useState("");
   const [showPrice, setShowPrice] = useState("");
   const [addingShow, setAddingShow] = useState(false);
+  const [trailerUrl, setTrailerUrl] = useState("");
 
   const fetchNowPlayingMovies = async () => {
     try {
@@ -71,7 +72,8 @@ const AddShows = () => {
     const payload = {
       movieId: selectedMovie,
       showsInput,
-      showPrice: Number(showPrice)
+      showPrice: Number(showPrice),
+      trailerUrl: trailerUrl.trim() || undefined
     }
 
     setAddingShow(true)
@@ -85,6 +87,8 @@ const AddShows = () => {
         setSelectedMovie(null)
         setDateTimeSelection({})
         setShowPrice("")
+        setTrailerUrl("")
+        fetchShows() // refresh global shows to expose new trailer
       } else {
         toast.error(data.message)
       }
@@ -150,6 +154,18 @@ const AddShows = () => {
             Add Time
           </button>
         </div>
+      </div>
+
+      {/* Trailer URL Input (moved below Date & Time) */}
+      <div className='mt-6'>
+        <label className='block text-sm font-medium mb-2'>Trailer YouTube URL (optional)</label>
+        <input
+          type='url'
+          placeholder='https://www.youtube.com/watch?v=...'
+          value={trailerUrl}
+          onChange={(e) => setTrailerUrl(e.target.value)}
+          className='w-full max-w-md px-3 py-2 rounded-md bg-black/40 border border-gray-600 outline-none focus:border-primary transition'
+        />
       </div>
 
       {/* Display Selected Times */}

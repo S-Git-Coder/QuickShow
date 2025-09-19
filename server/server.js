@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
-import connectDB from './configs/db.js';
+import connectDB, { ensureDb } from './configs/db.js';
 import mongoose from 'mongoose';
 
 // Set default NODE_ENV if not defined
@@ -50,10 +50,10 @@ const corsOptions = {
 
     // Define allowed origins
     const allowedOrigins = [
-      // Development origins (commented out for production)
-      // 'http://localhost:5173',
-      // 'http://localhost:5174',
-      // 'http://localhost:3000',
+      // Development origins
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:3000',
       // Production origin
       'https://quickshow-pied.vercel.app'
     ];
@@ -84,6 +84,18 @@ app.use(cors(corsOptions))
 
 // Configure Clerk middleware
 app.use(clerkMiddleware());
+
+// Ensure DB is connected before handling API routes (except health/root) to avoid Mongoose buffering timeouts
+app.use(async (req, res, next) => {
+  if (req.path === '/' || req.path === '/api/health') return next();
+  try {
+    await ensureDb();
+    next();
+  } catch (e) {
+    console.error('[ensureDb middleware] DB not ready:', e.message);
+    return res.status(503).json({ success: false, message: 'Database temporarily unavailable. Please retry shortly.' });
+  }
+});
 
 // API Routes 
 app.get('/', (req, res) => res.send('Server is Live!'))
