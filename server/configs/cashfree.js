@@ -38,13 +38,21 @@ if (cashfreeConfig.secretKey) {
 
 // Ensure baseUrl ends with /pg
 if (!cashfreeConfig.baseUrl.endsWith('/pg')) {
-    cashfreeConfig.baseUrl = cashfreeConfig.baseUrl.endsWith('/') 
-        ? `${cashfreeConfig.baseUrl}pg` 
+    cashfreeConfig.baseUrl = cashfreeConfig.baseUrl.endsWith('/')
+        ? `${cashfreeConfig.baseUrl}pg`
         : `${cashfreeConfig.baseUrl}/pg`;
 }
+
+// Optional: allow overriding the public payments UI host (used for redirect/hosted checkout)
+// Example: CASHFREE_PAYMENTS_URL=https://payments.cashfree.com/session
+let paymentsBase = process.env.CASHFREE_PAYMENTS_URL || (isProduction ? 'https://payments.cashfree.com/session' : 'https://sandbox.cashfree.com/session');
+// Normalize: remove trailing slash if present
+if (paymentsBase.endsWith('/')) paymentsBase = paymentsBase.slice(0, -1);
+cashfreeConfig.paymentsBaseUrl = paymentsBase;
 
 console.log('Active Config:');
 console.log('- App ID:', cashfreeConfig.appId ? `${cashfreeConfig.appId.substring(0, 6)}...` : 'Not set');
 console.log('- Base URL:', cashfreeConfig.baseUrl);
+console.log('- Payments UI Base:', cashfreeConfig.paymentsBaseUrl);
 
 export default cashfreeConfig;

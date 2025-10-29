@@ -394,12 +394,12 @@ const SeatLayout = () => {
         toast.error("Please select valid showtime before proceeding");
         return;
       }
-      
+
       if (!selectedTime.showId) {
         toast.error("Invalid showtime selected. Please try again.");
         return;
       }
-      
+
       if (!selectedSeats || !Array.isArray(selectedSeats) || selectedSeats.length === 0) {
         toast.error("Please select at least one seat");
         return;
@@ -415,16 +415,16 @@ const SeatLayout = () => {
         const seat = seatLayout ? seatLayout.flat().find(s => s && s.id === seatId) : null;
         return acc + (seat && seat.type ? seatTypePrices[seat.type].price : 0);
       }, 0);
-      
+
       // Convert rupees to paise (multiply by 100) for payment gateway
       const amountInPaise = amount * 100;
-      
+
       // Log the request being made
       console.log('Sending booking request:', { showId: selectedTime.showId, selectedSeats, amount: amountInPaise });
 
-      const { data } = await axios.post('/api/booking/create', { 
-        showId: selectedTime.showId, 
-        selectedSeats, 
+      const { data } = await axios.post('/api/booking/create', {
+        showId: selectedTime.showId,
+        selectedSeats,
         amount: amountInPaise // Amount in paise for payment gateway
       }, { headers: { Authorization: `Bearer ${await getToken()}` } });
 
@@ -442,18 +442,22 @@ const SeatLayout = () => {
           sessionStorage.setItem('paymentRedirect', 'true');
         }
 
-        // Preferred: use Cashfree SDK with paymentSessionId
-        // if (data.paymentSessionId) {
-        //   try {
-        //     const Cashfree = await loadCashfreeSdk();
-        //     const cashfree = Cashfree({ mode: 'production' });
-        //     console.log('Opening Cashfree checkout with session:', data.paymentSessionId);
-        //     await cashfree.checkout({ paymentSessionId: data.paymentSessionId, redirectTarget: '_self' });
-        //     return; // control will go to redirect URL after payment
-        //   } catch (sdkErr) {
-        //     console.error('Cashfree SDK checkout failed, falling back to direct link:', sdkErr);
-        //   }
-        // }
+        // Preferred: use Cashfree SDK with paymentSessionId (safer and avoids relying on a specific hosted path)
+        if (data.paymentSessionId) {
+          try {
+            const Cashfree = await loadCashfreeSdk();
+            // Choose SDK mode based on server hint when available; fallback to hostname heuristic
+            const sdkMode = typeof data.cashfreeIsProduction !== 'undefined' ? (data.cashfreeIsProduction ? 'production' : 'sandbox') : (window.location.hostname === 'localhost' ? 'sandbox' : 'production');
+            const cashfree = Cashfree({ mode: sdkMode });
+            console.log('Opening Cashfree checkout with session (SDK):', data.paymentSessionId, 'mode:', sdkMode, 'serverHint:', data.cashfreeIsProduction);
+            // Use checkout method from Cashfree SDK; this will redirect/control the window
+            await cashfree.checkout({ paymentSessionId: data.paymentSessionId, redirectTarget: '_self' });
+            return; // control will go to redirect URL after payment
+          } catch (sdkErr) {
+            console.error('Cashfree SDK checkout failed, falling back to direct link:', sdkErr);
+            // fall through to link fallback
+          }
+        }
 
         // Fallback: direct redirect to hosted checkout URL
         // if (data.paymentLink && data.paymentLink.startsWith('https://payments.cashfree.com/session/')) {
@@ -463,7 +467,7 @@ const SeatLayout = () => {
         // }
 
         if (data.paymentLink) {
-          console.log('Redirecting to payment page:', data.paymentLink);
+          console.log('Redirecting to payment page (fallback link):', data.paymentLink);
           window.location.href = data.paymentLink;
           return;
         }
@@ -507,7 +511,7 @@ const SeatLayout = () => {
           }
         }
       }
-      
+
       if (selectedTime) {
         getOccupiedSeats()
       }
@@ -557,11 +561,11 @@ const SeatLayout = () => {
         <div className='flex flex-col items-center mt-10 text-xs text-gray-300'>
           {(() => {
             // NEW LOGIC HERE
-    const dateOptions = Object.keys(show?.dateTime || {});
-    const selectedDate = dateOptions[1];
-    const slots = show?.dateTime?.[selectedDate] || [];
-    const currentShow = slots[0] || {};
-  const seatLayout = layouts[bookingDetails.screen] || layouts["Screen 1"];
+            const dateOptions = Object.keys(show?.dateTime || {});
+            const selectedDate = dateOptions[1];
+            const slots = show?.dateTime?.[selectedDate] || [];
+            const currentShow = slots[0] || {};
+            const seatLayout = layouts[bookingDetails.screen] || layouts["Screen 1"];
 
             return seatLayout.map((row, rowIndex) => {
               // Check if this row is the first of its type in the layout

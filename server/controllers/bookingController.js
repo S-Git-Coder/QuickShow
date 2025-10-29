@@ -89,7 +89,9 @@ export const createBooking = async (req, res) => {
 
         const orderPayload = {
             order_id: `order_${tempBookingId}`,
-            order_amount: amount,
+            // The frontend submits amount in paise. Cashfree expects rupees as string for order_amount.
+            // Convert paise -> rupees and send as string with 2 decimals.
+            order_amount: String((Number(amount) / 100).toFixed(2)),
             order_currency: "INR",
             customer_details: {
                 customer_id: userId,
@@ -159,29 +161,16 @@ export const createBooking = async (req, res) => {
                 console.log('  - Payment Session ID Length:', cashfreeRes.data.payment_session_id.length);
                 console.log('  - Raw Payment Session ID:', JSON.stringify(cashfreeRes.data.payment_session_id));
 
-                // Get clean session ID from response
-                let sessionId = String(cashfreeRes.data.payment_session_id).trim();
-
-                // Log the raw session ID for debugging
-console.log('🔍 RAW Session ID from Cashfree:', sessionId);
-
-        // AGGRESSIVE CLEANING: Remove ALL occurrences of "payment" text
-// Cashfree API sometimes adds "payment" or "paymentpayment" suffix (bug)
-// We need to remove ALL instances, not just at the end
-
-// Method 1: Remove all "payment" suffixes using loop
-while (sessionId.endsWith('payment')) {
-    sessionId = sessionId.slice(0, -7); // Remove last 7 characters ("payment")
-    console.log('⚠️ Removed "payment" suffix from session ID');
-}
+                // Get clean session ID from response and use it as-is (do not mutate provider token)
+                const sessionId = String(cashfreeRes.data.payment_session_id).trim();
+                console.log('🔍 RAW Session ID from Cashfree:', sessionId);
 
                 // Store for client-side SDK
                 paymentSessionId = sessionId;
 
-                // Construct payment URL - Direct Cashfree format
-                // paymentLink = `${basePaymentUrl}/${sessionId}`;
-                paymentLink = `https://payments.cashfree.com/session/${sessionId}`;
-
+                // Construct payment URL using configured paymentsBaseUrl and ensure the sessionId is encoded
+                const paymentBase = cashfreeConfig.paymentsBaseUrl || 'https://payments.cashfree.com/session';
+                paymentLink = `${paymentBase}/${encodeURIComponent(sessionId)}`;
 
                 console.log('- Generated Payment URL:', paymentLink);
 
@@ -246,9 +235,9 @@ while (sessionId.endsWith('payment')) {
 
         // --------- Cashfree Order Create Logic END ---------
 
-        // Validate payment link before returning to client
-        if (!paymentLink || !paymentLink.startsWith('https://payments.cashfree.com/session')) {
-            console.error('❌ Invalid payment link format:', paymentLink);
+        // Validate payment link before returning to client - be flexible and ensure it contains the session id
+        if (!paymentLink || (paymentSessionId && !paymentLink.includes(encodeURIComponent(paymentSessionId)) && !paymentLink.includes(paymentSessionId))) {
+            console.error('❌ Invalid payment link or session mismatch:', paymentLink);
             return res.json({
                 success: false,
                 message: "Failed to generate a valid payment link. Please try again.",
@@ -256,13 +245,15 @@ while (sessionId.endsWith('payment')) {
             });
         }
 
-        // Return success response with payment link only
+        // Return success response with payment link and environment hint for frontend SDK mode
         return res.json({
             success: true,
             message: "Payment link generated successfully",
             paymentLink: paymentLink,
             paymentSessionId,
-            tempBookingId: tempBookingId
+            tempBookingId: tempBookingId,
+            // Hint to frontend about whether we are using Cashfree production credentials
+            cashfreeIsProduction: envInfo.isProduction || (process.env.CASHFREE_USE_PRODUCTION === 'true')
         });
     } catch (error) {
         // Enhanced error logging
