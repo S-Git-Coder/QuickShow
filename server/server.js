@@ -14,6 +14,7 @@ import bookingRouter from './routes/bookingRoutes.js';
 import adminRouter from './routes/adminRoutes.js';
 import userRouter from './routes/userRoutes.js';
 import testRouter from './routes/testRoutes.js';
+import contactRouter from './routes/contactRoutes.js';
 
 const app = express();
 const port = 3000;
@@ -30,9 +31,9 @@ const corsOptions = {
     // Define allowed origins
     const allowedOrigins = [
       // Development origins (commented out for production)
-      // 'http://localhost:5173',
-      // 'http://localhost:5174',
-      // 'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:3000',
       // Production origin
       'https://quickshow-pied.vercel.app'
     ];
@@ -59,7 +60,9 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-app.use(cors(corsOptions))
+// app.use(cors(corsOptions))
+app.use(cors());
+
 
 // Configure Clerk middleware
 app.use(clerkMiddleware());
@@ -72,6 +75,7 @@ app.use('/api/booking', bookingRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/user', userRouter)
 app.use('/api/test', testRouter)
+app.use('/api/contact', contactRouter)
 
 // Lightweight health check endpoint
 app.get('/api/health', async (req, res) => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import { MenuIcon, SearchIcon, TicketPlus, XIcon } from "lucide-react";
 import { useClerk, UserButton, useUser, useAuth } from '@clerk/clerk-react'
@@ -14,6 +14,7 @@ const Navbar = () => {
   const { isSignedIn } = useAuth()
 
   const navigate = useNavigate()
+  const location = useLocation()
 
   const { favoriteMovies } = useAppContext()
 
@@ -40,12 +41,49 @@ const Navbar = () => {
         <XIcon className='md:hidden absolute top-6 right-6 w-6 h-6 cursor-pointer'
           onClick={() => setIsOpen(!isOpen)} />
 
-        <Link onClick={() => { scrollTo(0, 0); setIsOpen(false) }} to='/'>Home</Link>
-        <Link onClick={() => { scrollTo(0, 0); setIsOpen(false) }} to='/movies'>Movies</Link>
-        <Link onClick={() => { scrollTo(0, 0); setIsOpen(false) }} to='/'>Theaters</Link>
-        <Link onClick={() => { scrollTo(0, 0); setIsOpen(false) }} to='/'>Releases</Link>
+        <Link 
+          onClick={() => { scrollTo(0, 0); setIsOpen(false) }} 
+          to='/' 
+          className={`transition-colors ${location.pathname === '/' ? 'text-primary font-bold' : 'hover:text-gray-300'}`}
+        >
+          Home
+        </Link>
+        <Link 
+          onClick={() => { scrollTo(0, 0); setIsOpen(false) }} 
+          to='/movies' 
+          className={`transition-colors ${location.pathname === '/movies' ? 'text-primary font-bold' : 'hover:text-gray-300'}`}
+        >
+          Movies
+        </Link>
+        <Link 
+          onClick={() => { scrollTo(0, 0); setIsOpen(false) }} 
+          to='/theaters' 
+          className={`transition-colors ${location.pathname === '/theaters' ? 'text-primary font-bold' : 'hover:text-gray-300'}`}
+        >
+          Theaters
+        </Link>
+        <Link 
+          onClick={() => { scrollTo(0, 0); setIsOpen(false) }} 
+          to='/releases' 
+          className={`transition-colors ${location.pathname === '/releases' ? 'text-primary font-bold' : 'hover:text-gray-300'}`}
+        >
+          Releases
+        </Link>
+        <Link 
+          onClick={() => { scrollTo(0, 0); setIsOpen(false) }} 
+          to='/about' 
+          className={`transition-colors ${location.pathname === '/about' ? 'text-primary font-bold' : 'hover:text-gray-300'}`}
+        >
+          About Us
+        </Link>
         {favoriteMovies.length > 0 &&
-          <Link onClick={() => { scrollTo(0, 0); setIsOpen(false) }} to='/favorite'>Favorites</Link>
+          <Link 
+            onClick={() => { scrollTo(0, 0); setIsOpen(false) }} 
+            to='/favorite' 
+            className={`transition-colors ${location.pathname === '/favorite' ? 'text-primary font-bold' : 'hover:text-gray-300'}`}
+          >
+            Favorites
+          </Link>
         }
 
       </div>

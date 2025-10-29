@@ -8,8 +8,24 @@
 
 *{
      font-family: "Outfit", sans-serif;
-     scrollbar-width: thin;
-     scrollbar-color: #787777 #1e1e1e;
+     scrollbar-width: none; /* Firefox */
+}
+
+/* Hide scrollbar but allow scrolling */
+body, html, div, section, main, aside, nav, article, .scrollable { 
+    scrollbar-width: none; /* Firefox */ 
+}
+
+body::-webkit-scrollbar, 
+html::-webkit-scrollbar,
+div::-webkit-scrollbar,
+section::-webkit-scrollbar,
+main::-webkit-scrollbar,
+aside::-webkit-scrollbar,
+nav::-webkit-scrollbar,
+article::-webkit-scrollbar,
+.scrollable::-webkit-scrollbar { 
+    display: none; /* Chrome, Safari, Edge */ 
 }
 
 body{

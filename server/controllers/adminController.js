@@ -53,3 +53,38 @@ export const getAllBookings = async (req, res) => {
         res.json({ success: false, message: error.message })
     }
 }
+
+// API to delete shows
+export const deleteShows = async (req, res) => {
+    try {
+        const { showIds } = req.body;
+        
+        if (!showIds || !Array.isArray(showIds) || showIds.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Show IDs are required and must be a non-empty array" 
+            });
+        }
+        
+        // Delete shows with the provided IDs
+        const result = await Show.deleteMany({ _id: { $in: showIds } });
+        
+        if (result.deletedCount > 0) {
+            res.json({ 
+                success: true, 
+                message: `Successfully deleted ${result.deletedCount} show(s)` 
+            });
+        } else {
+            res.json({ 
+                success: false, 
+                message: "No shows were deleted. Shows may not exist or have already been deleted." 
+            });
+        }
+    } catch (error) {
+        console.error("Error deleting shows:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message || "An error occurred while deleting shows" 
+        });
+    }
+}

@@ -1,5 +1,6 @@
 import React from 'react'
 import { assets } from '../assets/assets'
+import { Link } from 'react-router-dom'
 
 const Footer = () => {
   return (
@@ -8,21 +9,18 @@ const Footer = () => {
         <div className="md:max-w-96">
           <img className="w-36 h-auto" src={assets.logo} alt="logo" />
           <p className="mt-6 text-sm">
-            Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book.
+            QuickShow makes movie booking effortless—find the latest releases, nearby theaters, and your perfect seat in seconds.
+            Enjoy quick, secure booking and seamless movie experiences, every time.
           </p>
-          <div className="flex items-center gap-2 mt-4">
-            <img src={assets.googlePlay} alt="google play" className="h-9 w-auto" />
-            <img src={assets.appStore} alt="app store" className="h-9 w-auto" />
-          </div>
+  
         </div>
         <div className="flex-1 flex items-start md:justify-end gap-20 md:gap-40">
           <div>
             <h2 className="font-semibold mb-5">Company</h2>
             <ul className="text-sm space-y-2">
-              <li><a href="#">Home</a></li>
-              <li><a href="#">About us</a></li>
-              <li><a href="#">Contact us</a></li>
-              <li><a href="#">Privacy policy</a></li>
+              <li><Link to="/">Home</Link></li>
+              <li><Link to="/about">About us</Link></li>
+              <li><Link to="/contact">Contact us</Link></li>
             </ul>
           </div>
           <div>

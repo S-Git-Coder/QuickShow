@@ -50,7 +50,7 @@ const ListShows = () => {
                 <td className='p-2 min-w-45 pl-5'>{show.movie.title}</td>
                 <td className='p-2'>{dateFormat(show.showDateTime)}</td>
                 <td className='p-2'>{Object.keys(show.occupiedSeats).length}</td>
-                <td className='p-2'>{currency} {Object.keys(show.occupiedSeats).length * show.showPrice}</td>
+                <td className='p-2'>₹ {Object.keys(show.occupiedSeats).length * show.showPrice}</td>
               </tr>
             ))}
           </tbody>

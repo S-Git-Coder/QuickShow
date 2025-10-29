@@ -28,7 +28,12 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
 export const createBooking = async (req, res) => {
     try {
         const { userId } = req.auth();
-        const { showId, selectedSeats } = req.body;
+        const { showId, selectedSeats, amount } = req.body;
+
+        // Validate amount
+        if (!amount || amount <= 0) {
+            return res.json({ success: false, message: "Invalid booking amount" });
+        }
 
         const isAvailable = await checkSeatsAvailability(showId, selectedSeats);
         if (!isAvailable) {
@@ -36,9 +41,6 @@ export const createBooking = async (req, res) => {
         }
 
         const showData = await Show.findById(showId).populate('movie');
-
-        // Calculate the amount but don't create the booking yet
-        const amount = showData.showPrice * selectedSeats.length;
 
         const user = await User.findById(userId);
         if (!user) {
@@ -157,86 +159,42 @@ export const createBooking = async (req, res) => {
                 console.log('  - Payment Session ID Length:', cashfreeRes.data.payment_session_id.length);
                 console.log('  - Raw Payment Session ID:', JSON.stringify(cashfreeRes.data.payment_session_id));
 
-                // Construct payment URL - ensure proper formatting with a slash between base URL and session ID
-                const sessionId = cashfreeRes.data.payment_session_id.trim();
-                paymentSessionId = sessionId; // keep for client-side SDK
-                paymentLink = `${basePaymentUrl}/${sessionId}`;
+                // Get clean session ID from response
+                let sessionId = String(cashfreeRes.data.payment_session_id).trim();
+
+                // Log the raw session ID for debugging
+console.log('🔍 RAW Session ID from Cashfree:', sessionId);
+
+        // AGGRESSIVE CLEANING: Remove ALL occurrences of "payment" text
+// Cashfree API sometimes adds "payment" or "paymentpayment" suffix (bug)
+// We need to remove ALL instances, not just at the end
+
+// Method 1: Remove all "payment" suffixes using loop
+while (sessionId.endsWith('payment')) {
+    sessionId = sessionId.slice(0, -7); // Remove last 7 characters ("payment")
+    console.log('⚠️ Removed "payment" suffix from session ID');
+}
+
+                // Store for client-side SDK
+                paymentSessionId = sessionId;
+
+                // Construct payment URL - Direct Cashfree format
+                // paymentLink = `${basePaymentUrl}/${sessionId}`;
+                paymentLink = `https://payments.cashfree.com/session/${sessionId}`;
+
+
                 console.log('- Generated Payment URL:', paymentLink);
 
-                // Verify the payment URL is valid
-                try {
-                    // Make a HEAD request to check if the URL is accessible
-                    console.log('- Verifying payment URL accessibility...');
-                    const verifyUrl = async () => {
-                        try {
-                            // First verify the session is valid with Cashfree
-                            const sessionDetails = await axios.get(
-                                `${cashfreeConfig.baseUrl}/orders/${cashfreeRes.data.order_id}`,
-                                {
-                                    headers: {
-                                        "x-client-id": cashfreeConfig.appId,
-                                        "x-client-secret": cashfreeConfig.secretKey,
-                                        "x-api-version": "2023-08-01",
-                                        "Content-Type": "application/json"
-                                    },
-                                    timeout: 5000
-                                }
-                            );
-
-                            console.log('  - Session Details:', JSON.stringify(sessionDetails.data));
-                            console.log('  - Session Status:', sessionDetails.data.order_status);
-
-                            if (sessionDetails.data.payment_session_id) {
-                                // If the session details contain a payment_session_id, use that one (it might be different)
-                                const verifiedSessionId = sessionDetails.data.payment_session_id.trim();
-                                if (verifiedSessionId !== sessionId) {
-                                    console.log('  - ⚠️ Session ID mismatch, updating to verified ID');
-                                    console.log('  - Original:', sessionId);
-                                    console.log('  - Verified:', verifiedSessionId);
-                                    paymentSessionId = verifiedSessionId;
-                                    paymentLink = `${basePaymentUrl}/${verifiedSessionId}`;
-                                    console.log('  - Updated Payment URL:', paymentLink);
-                                }
-                            }
-
-                            // Now try to verify the URL is accessible
-                            try {
-                                const verifyResponse = await axios.head(paymentLink, { timeout: 5000 });
-                                console.log('  - URL Verification Status:', verifyResponse.status);
-                                console.log('  - URL is accessible ✅');
-                            } catch (urlError) {
-                                console.error('  - URL Verification Failed ❌');
-                                console.error('  - Status:', urlError.response ? urlError.response.status : 'No response');
-                                console.error('  - Error:', urlError.message);
-                            }
-                        } catch (sessionError) {
-                            console.error('  - Failed to get session details:', sessionError.message);
-                            console.error('  - Status:', sessionError.response ? sessionError.response.status : 'No response');
-
-                            // Try direct URL verification as fallback
-                            try {
-                                const verifyResponse = await axios.head(paymentLink, { timeout: 5000 });
-                                console.log('  - Fallback URL Verification Status:', verifyResponse.status);
-                                console.log('  - URL is accessible via fallback check ✅');
-                            } catch (urlError) {
-                                console.error('  - Fallback URL Verification Failed ❌');
-                                console.error('  - Status:', urlError.response ? urlError.response.status : 'No response');
-                            }
-                        }
-                    };
-
-                    // Execute verification asynchronously (don't wait for it)
-                    verifyUrl();
-                } catch (error) {
-                    console.error('- Error during URL verification setup:', error.message);
-                }
+                // Removed verification block that was causing session ID corruption
+                // The original payment_session_id from order creation is correct and should be used directly
 
                 // Store the payment session ID in the session for verification later
                 if (req.session && req.session.pendingBooking) {
-                    req.session.pendingBooking.paymentSessionId = cashfreeRes.data.payment_session_id;
+                    req.session.pendingBooking.paymentSessionId = sessionId;
                     req.session.pendingBooking.paymentLink = paymentLink;
                 }
-                // Save payment link to pending booking for Pay Now retry
+
+                // Save payment link to pending booking
                 await Booking.findByIdAndUpdate(tempBookingId, { paymentLink });
             } else {
                 paymentLink = null;
@@ -289,7 +247,7 @@ export const createBooking = async (req, res) => {
         // --------- Cashfree Order Create Logic END ---------
 
         // Validate payment link before returning to client
-        if (!paymentLink || !paymentLink.startsWith('https://payments.cashfree.com/session/')) {
+        if (!paymentLink || !paymentLink.startsWith('https://payments.cashfree.com/session')) {
             console.error('❌ Invalid payment link format:', paymentLink);
             return res.json({
                 success: false,
