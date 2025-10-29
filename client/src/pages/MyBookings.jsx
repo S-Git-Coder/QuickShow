@@ -73,44 +73,59 @@ const MyBookings = () => {
         </div>
       )}
 
-      {bookings.map((item, index) => (
-        <div key={index} className='flex flex-col md:flex-row justify-between bg-primary/8 border border-primary/20 rounded-lg mt-4 p-2 max-w-3xl'>
-          <div className='flex flex-col md:flex-row'>
-            <img src={image_base_url + item.show.movie.poster_path} alt="" className='md:max-w-45 aspect-video h-auto object-cover object-bottom rounded' />
-            <div className='flex flex-col p-4'>
-              <p className='text-lg font-semibold'>{item.show.movie.title}</p>
-              <p className='text-gray-400 text-sm'>{timeFormat(item.show.movie.runtime)}</p>
-              <p className='text-gray-400 text-sm mt-auto'>{dateFormat(item.show.showDateTime)}</p>
-            </div>
-          </div>
+      {bookings.map((item, index) => {
+        // Defensive guards: item or nested properties may be null after redirect/webhook timing
+        if (!item) return null
 
-          <div className='flex flex-col md:items-end md:text-right justify-between p-4'>
-            <div className='flex items-center gap-4'>
-              <p className='text-2xl font-semibold mb-3'>{currency}{item.amount}</p>
-              {!item.isPaid && (
-                <button
-                  onClick={() => {
-                    if (item.paymentLink) {
-                      window.location.href = item.paymentLink
-                    } else {
-                      toast.error('Payment link not available. Please try again later.')
-                      getMyBookings()
-                    }
-                  }}
-                  className='bg-primary px-4 py-1.5 mb-3 text-sm rounded-full font-medium cursor-pointer'
-                >
-                  Pay Now
-                </button>
-              )}
+        const show = item.show || {}
+        const movie = show.movie || {}
+        const posterPath = movie.poster_path ? image_base_url + movie.poster_path : ''
+        const title = movie.title || 'Untitled'
+        const runtime = movie.runtime ? timeFormat(movie.runtime) : ''
+        const showDate = show.showDateTime ? dateFormat(show.showDateTime) : ''
+        const amount = typeof item.amount !== 'undefined' ? item.amount : '0'
+        const bookedSeats = Array.isArray(item.bookedSeats) ? item.bookedSeats : []
+        const isPaid = Boolean(item.isPaid)
+
+        return (
+          <div key={item._id || index} className='flex flex-col md:flex-row justify-between bg-primary/8 border border-primary/20 rounded-lg mt-4 p-2 max-w-3xl'>
+            <div className='flex flex-col md:flex-row'>
+              <img src={posterPath} alt={title} className='md:max-w-45 aspect-video h-auto object-cover object-bottom rounded' />
+              <div className='flex flex-col p-4'>
+                <p className='text-lg font-semibold'>{title}</p>
+                <p className='text-gray-400 text-sm'>{runtime}</p>
+                <p className='text-gray-400 text-sm mt-auto'>{showDate}</p>
+              </div>
             </div>
-            <div className='text-sm'>
-              <p><span className='text-gray-400'>Total Tickets:</span> {item.bookedSeats.length}</p>
-              <p><span className='text-gray-400'>Seat Number:</span> {item.bookedSeats.join(', ')}</p>
-              <p><span className='text-gray-400'>Status:</span> <span className={item.isPaid ? 'text-green-500' : 'text-yellow-500'}>{item.isPaid ? 'Paid' : 'Pending'}</span></p>
+
+            <div className='flex flex-col md:items-end md:text-right justify-between p-4'>
+              <div className='flex items-center gap-4'>
+                <p className='text-2xl font-semibold mb-3'>{currency}{amount}</p>
+                {!isPaid && (
+                  <button
+                    onClick={() => {
+                      if (item.paymentLink) {
+                        window.location.href = item.paymentLink
+                      } else {
+                        toast.error('Payment link not available. Please try again later.')
+                        getMyBookings()
+                      }
+                    }}
+                    className='bg-primary px-4 py-1.5 mb-3 text-sm rounded-full font-medium cursor-pointer'
+                  >
+                    Pay Now
+                  </button>
+                )}
+              </div>
+              <div className='text-sm'>
+                <p><span className='text-gray-400'>Total Tickets:</span> {bookedSeats.length}</p>
+                <p><span className='text-gray-400'>Seat Number:</span> {bookedSeats.join(', ')}</p>
+                <p><span className='text-gray-400'>Status:</span> <span className={isPaid ? 'text-green-500' : 'text-yellow-500'}>{isPaid ? 'Paid' : 'Pending'}</span></p>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   ) : <Loading />
 }
