@@ -100,7 +100,7 @@ const MyBookings = () => {
 
             <div className='flex flex-col md:items-end md:text-right justify-between p-4'>
               <div className='flex items-center gap-4'>
-                <p className='text-2xl font-semibold mb-3'>{currency}{amount}</p>
+                <p className='text-2xl font-semibold mb-3'>{currency}{(Number(amount) / 100).toFixed(2)}</p>
                 {!isPaid && (
                   <button
                     onClick={() => {
