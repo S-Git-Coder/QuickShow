@@ -363,37 +363,45 @@ const MovieDetails = () => {
                     <div className='animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary'></div>
                   </div>
                 ) : availableTheaters.length > 0 ? (
-                  <div className='space-y-6'>
+                  <div className='grid grid-cols-1 gap-4'>
                     {availableTheaters.map((theater) => (
-  <div key={theater.id} className="bg-gray-800/50 p-4 rounded-lg">
-    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3">
-      <h3 className="text-white font-medium">{theater.name}</h3>
-      <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
-        {theater.slots && theater.slots.length > 0 ? (
-          theater.slots.map((slot, idx) => (
-            <button
-              key={slot.showId}
-              className="bg-gray-700 hover:bg-primary/40 text-white text-xs px-3 py-1.5 rounded-md transition-all"
-              onClick={() => {
-                navigate(`/movies/${id}/${selectedDate.formattedDate}`, {
-                  state: {
-                    city: selectedCity,
-                    theater: theater.name,
-                    showtime: new Date(slot.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    movieTitle: show.movie.title,
-                    date: selectedDate,
-                    screen: slot.screen,
-                    showId: slot.showId
-                  }
-                });
-              }}
-            >
-              {new Date(slot.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} ({slot.screen})
-            </button>
-          ))
-        ) : (
-          <span className="text-gray-400 text-xs">No showtimes available</span>
-        )}
+  <div key={theater.id} className="bg-gray-800/80 p-5 rounded-xl shadow-lg border border-gray-700/50 hover:border-primary/30 transition-all">
+    <div className="flex flex-col space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-white font-medium text-lg">{theater.name}</h3>
+        <span className="bg-primary/20 text-primary text-xs px-3 py-1 rounded-full">Available</span>
+      </div>
+      
+      <div className="pt-2 border-t border-gray-700/50">
+        <p className="text-gray-300 text-xs mb-3">Available Showtimes:</p>
+        <div className="flex flex-wrap gap-2">
+          {theater.slots && theater.slots.length > 0 ? (
+            theater.slots.map((slot) => (
+              <button
+                key={slot.showId}
+                className="bg-gray-700 hover:bg-primary/40 text-white text-xs px-3 py-2 rounded-md transition-all flex items-center gap-1"
+                onClick={() => {
+                  navigate(`/movies/${id}/${selectedDate.formattedDate}`, {
+                    state: {
+                      city: selectedCity,
+                      theater: theater.name,
+                      showtime: new Date(slot.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      movieTitle: show.movie.title,
+                      date: selectedDate,
+                      screen: slot.screen,
+                      showId: slot.showId
+                    }
+                  });
+                }}
+              >
+                <span>{new Date(slot.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                <span className="text-primary/80">({slot.screen})</span>
+              </button>
+            ))
+          ) : (
+            <span className="text-gray-400 text-xs">No showtimes available</span>
+          )}
+        </div>
       </div>
     </div>
   </div>
