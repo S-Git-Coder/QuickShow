@@ -1,4 +1,4 @@
-import { ChartLineIcon, CircleDollarSignIcon, PlayCircleIcon, StarIcon, UserIcon, Trash2Icon } from 'lucide-react';
+import { ChartLineIcon, PlayCircleIcon, StarIcon, UserIcon, Trash2Icon } from 'lucide-react';
 import React, { useEffect, useState } from 'react'
 import { dummyDashboardData } from '../../assets/assets';
 import Loading from '../../components/Loading';
@@ -24,12 +24,28 @@ const Dashboard = () => {
   const [selectedShows, setSelectedShows] = useState([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
+  // Small inline Rupee icon component used for dashboard cards (accepts className prop)
+  // Make rupee glyph visually match the SVG icons by increasing font-size and removing extra line-height
+  const RupeeIcon = ({ className }) => (
+    <span className={`${className} inline-flex items-center justify-center text-2xl leading-none font-medium`}>
+      ₹
+    </span>
+  );
+
   const dashboardCards = [
     { title: "Total Bookings", value: dashboardData.totalBookings || "0", icon: ChartLineIcon },
-    { title: "Total Revenue", value: dashboardData.totalRevenue || "0", icon: CircleDollarSignIcon },
+    { title: "Total Revenue", value: dashboardData.totalRevenue || "0", icon: RupeeIcon },
     { title: "Active Shows", value: dashboardData.activeShows.length || "0", icon: PlayCircleIcon },
     { title: "Total Users", value: dashboardData.totalUser || "0", icon: UserIcon },
   ]
+
+  // helper to format paisa -> rupees with ₹ prefix for UI
+  const formatRupee = (paisa) => {
+    const n = Number(paisa) || 0;
+    const rupees = n / 100;
+    if (n % 100 === 0) return `₹ ${rupees}`;
+    return `₹ ${rupees.toFixed(2).replace(/\.00$/, '')}`;
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -46,7 +62,7 @@ const Dashboard = () => {
       toast.error('Error fetching dashboard data:', error)
     }
   };
-  
+
   const handleSelectShow = (showId) => {
     setSelectedShows(prev => {
       if (prev.includes(showId)) {
@@ -56,16 +72,16 @@ const Dashboard = () => {
       }
     });
   };
-  
+
   const deleteSelectedShows = async () => {
     if (selectedShows.length === 0) return;
-    
+
     try {
       const { data } = await axios.delete("/api/admin/shows", {
         headers: { Authorization: `Bearer ${await getToken()}` },
         data: { showIds: selectedShows }
       });
-      
+
       if (data.success) {
         // Update UI by filtering out deleted shows
         setDashboardData(prev => ({
@@ -80,7 +96,7 @@ const Dashboard = () => {
     } catch (error) {
       toast.error("Error deleting shows: " + (error.message || error));
     }
-    
+
     setShowConfirmation(false);
   };
 
@@ -101,7 +117,9 @@ const Dashboard = () => {
             <div key={card.title} className='flex items-center justify-between px-4 py-3 bg-primary/10 border border-primary/20 rounded-md max-w-50 w-full'>
               <div>
                 <h1 className='text-sm'>{card.title}</h1>
-                <p className='text-xl font-medium mt-1'>{card.value}</p>
+                <p className='text-xl font-medium mt-1'>
+                  {card.title === 'Total Revenue' ? formatRupee(dashboardData.totalRevenue || 0) : card.value}
+                </p>
               </div>
               <card.icon className='w-6 h-6' />
             </div>
@@ -111,7 +129,7 @@ const Dashboard = () => {
 
       <div className='mt-10 flex justify-between items-center'>
         <p className='text-lg font-medium'>Active Shows</p>
-        <button 
+        <button
           onClick={() => selectedShows.length > 0 && setShowConfirmation(true)}
           disabled={selectedShows.length === 0}
           className={`flex items-center gap-2 px-4 py-2 rounded ${selectedShows.length > 0 ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 cursor-not-allowed'} text-white transition`}
@@ -127,8 +145,8 @@ const Dashboard = () => {
             <div className="relative">
               <img src={image_base_url + show.movie.poster_path} alt='' className="h-60 w-full object-cover" />
               <div className="absolute top-2 left-2">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   checked={selectedShows.includes(show._id)}
                   onChange={() => handleSelectShow(show._id)}
                   className="h-5 w-5 accent-primary cursor-pointer"
@@ -146,7 +164,7 @@ const Dashboard = () => {
           </div>
         ))}
       </div>
-      
+
       {/* Confirmation Dialog */}
       {showConfirmation && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -154,13 +172,13 @@ const Dashboard = () => {
             <h3 className="text-xl font-medium mb-4">Confirm Deletion</h3>
             <p className="text-gray-300 mb-6">Are you sure you want to delete {selectedShows.length} selected show{selectedShows.length > 1 ? 's' : ''}? This action cannot be undone.</p>
             <div className="flex justify-end gap-3">
-              <button 
+              <button
                 onClick={() => setShowConfirmation(false)}
                 className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded text-white"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={deleteSelectedShows}
                 className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded text-white"
               >
