@@ -14,20 +14,37 @@ const ListBookings = () => {
   const [bookings, setBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // small helper to format paisa -> rupees with ₹ prefix
+  const formatRupee = (paisa) => {
+    const n = Number(paisa) || 0;
+    const rupees = n / 100;
+    // show integer when divisible by 100, otherwise show up to 2 decimals
+    if (n % 100 === 0) return `₹ ${rupees}`;
+    return `₹ ${rupees.toFixed(2).replace(/\.00$/, '')}`;
+  }
+
+  // PDF-specific formatter that uses 'Rs' instead of the rupee glyph (jsPDF default fonts don't support ₹)
+  const formatRupeeForPDF = (paisa) => {
+    const n = Number(paisa) || 0;
+    const rupees = n / 100;
+    if (n % 100 === 0) return `Rs ${rupees}`;
+    return `Rs ${rupees.toFixed(2).replace(/\.00$/, '')}`;
+  }
+
   const generatePDF = () => {
     const doc = new jsPDF();
     doc.setFont("helvetica");
-    
+
     // Add title to the PDF
     doc.setFontSize(18);
     doc.text('Bookings List', 14, 22);
-    
+
     // Define the columns for the table
     const tableColumn = ["User Name", "Movie Name", "Show Time", "Seats", "Amount"];
-    
+
     // Define the rows for the table
     const tableRows = [];
-    
+
     // Add data to rows
     bookings.forEach(item => {
       const userData = [
@@ -35,18 +52,18 @@ const ListBookings = () => {
         item.show?.movie?.title || "Movie Not Found",
         item.show?.showDateTime ? dateFormat(item.show.showDateTime) : "Unknown Time",
         item.bookedSeats ? Object.keys(item.bookedSeats).map(seat => item.bookedSeats[seat]).join(", ") : "No Seats",
-        item.amount
+        formatRupeeForPDF(item.amount)
       ];
       tableRows.push(userData);
     });
-    
+
     // Generate the table
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 30,
       theme: 'grid',
-      styles: { 
+      styles: {
         fontSize: 10,
         cellPadding: 3,
         overflow: 'linebreak'
@@ -60,7 +77,7 @@ const ListBookings = () => {
         fillColor: [240, 240, 240]
       }
     });
-    
+
     // Save the PDF
     doc.save('bookings-list.pdf');
   };
@@ -78,7 +95,7 @@ const ListBookings = () => {
   };
 
   useEffect(() => {
-    if(user){
+    if (user) {
       getAllBookings();
     }
   }, [user]);
@@ -87,8 +104,8 @@ const ListBookings = () => {
     <>
       <div className="flex justify-between items-center">
         <Title text1="List" text2="Bookings" />
-        <button 
-          onClick={generatePDF} 
+        <button
+          onClick={generatePDF}
           className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md flex items-center"
         >
           Download PDF
@@ -111,8 +128,8 @@ const ListBookings = () => {
                 <td className='p-2 min-w-45 pl-5'>{item.user?.name || "Unknown User"}</td>
                 <td className='p-2'>{item.show?.movie?.title || "Movie Not Found"}</td>
                 <td className='p-2'>{item.show?.showDateTime ? dateFormat(item.show.showDateTime) : "Unknown Time"}</td>
-                <td className='p-2'>{item.bookedSeats? Object.keys(item.bookedSeats).map(seat => item.bookedSeats[seat]).join(", ") : "No Seats"}</td>
-                <td className='p-2'>₹ {item.amount}</td>
+                <td className='p-2'>{item.bookedSeats ? Object.keys(item.bookedSeats).map(seat => item.bookedSeats[seat]).join(", ") : "No Seats"}</td>
+                <td className='p-2'>{formatRupee(item.amount)}</td>
               </tr>
             ))}
           </tbody>
